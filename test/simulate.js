@@ -142,16 +142,16 @@ test('Stalled main thread: launches one bar late, once, and counts from the real
 });
 test('Manual launch of a mapped scene is followed; mode and counting update', () => {
   const L = makeLive({ lens: { 6: 32, 23: 16 } }); start(L, 6); L.adv(5); L.fireScene(23, true); L.adv(4);
-  assert.deepStrictEqual(seq(L), [6, 23]); assert.strictEqual(L.out[0], 'Chorus 2');
+  assert.deepStrictEqual(seq(L), [6, 23]); assert.strictEqual(L.out[0], 'CHORUS 2');
   L.adv(16); assert.deepStrictEqual(seq(L), [6, 23, 26]); assert.strictEqual(L.log[2][1], 24);
 });
 test('Manual launch replaces a committed router launch', () => {
   const L = makeLive({ lens: { 14: 32 } }); start(L, 14); L.adv(31.5); L.fireScene(5, true); L.adv(1);
-  assert.deepStrictEqual(seq(L), [14, 5]); assert.strictEqual(L.out[0], 'Intro'); assert.strictEqual(L.out[1], 'JAM');
+  assert.deepStrictEqual(seq(L), [14, 5]); assert.strictEqual(L.out[0], 'INTRO'); assert.strictEqual(L.out[1], 'JAM');
 });
 test('Yellow scene launch is ignored and the song clock continues', () => {
   const L = makeLive({ lens: { 6: 32 } }); start(L, 6); L.adv(4); L.fireScene(7, true); L.adv(5);
-  assert.strictEqual(L.out[0], 'Intro'); L.adv(25); assert.deepStrictEqual(seq(L), [6, 7, 10]); assert.strictEqual(L.log[2][1], 32);
+  assert.strictEqual(L.out[0], 'INTRO'); L.adv(25); assert.deepStrictEqual(seq(L), [6, 7, 10]); assert.strictEqual(L.log[2][1], 32);
 });
 test('Stop clears everything and nothing fires until a new launch', () => {
   const L = makeLive({ lens: { 14: 32 } }); start(L, 14); L.adv(4); L.ctx.toggle(); L.stop();
@@ -160,7 +160,7 @@ test('Stop clears everything and nothing fires until a new launch', () => {
 });
 test('Scene launched from stopped transport without a notification is found by the probe', () => {
   const L = makeLive({ lens: { 6: 16 }, noTrigWhenStopped: true }); L.fireScene(6, true); L.adv(2);
-  assert.strictEqual(L.out[0], 'Intro'); L.adv(15); assert.deepStrictEqual(seq(L), [6, 10]); assert.strictEqual(L.log[1][1], 16);
+  assert.strictEqual(L.out[0], 'INTRO'); L.adv(15); assert.deepStrictEqual(seq(L), [6, 10]); assert.strictEqual(L.log[1][1], 16);
 });
 test('Stop All Clips does not bring the band back at the boundary', () => {
   const L = makeLive({ lens: { 14: 32 } }); start(L, 14); L.adv(4); L.stopAll(); L.adv(40);
@@ -226,7 +226,7 @@ test('Lamp requests after commit apply to the incoming section and refuse END', 
 });
 test('PREV launches the previous green scene at the next bar, once, then auto-advances', () => {
   const L = makeLive({ lens: { 14: 32, 10: 16 } }); start(L, 14); L.adv(5.2); L.ctx.prev(); L.adv(0.2); L.ctx.prev(); L.adv(3);
-  assert.deepStrictEqual(seq(L), [14, 10]); assert.strictEqual(L.log[1][1], 8); assert.strictEqual(L.out[0], 'Verse 1');
+  assert.deepStrictEqual(seq(L), [14, 10]); assert.strictEqual(L.log[1][1], 8); assert.strictEqual(L.out[0], 'VERSE 1');
   L.adv(16); assert.deepStrictEqual(seq(L), [14, 10, 14]); assert.strictEqual(L.log[2][1], 24);
 });
 test('PREV from a JAM section goes to the section before it, and clears the JAM request', () => {
@@ -251,14 +251,14 @@ test('PREV while a launch is locked is ignored', () => {
 });
 test('Moved scenes are found by name: your 2-scene shift launches the right scenes', () => {
   const L = makeLive({ lens: { 6: 16, 10: 32, 14: 32, 12: 16 }, removeFirst: 2 }); assert.strictEqual(L.ctx.S.armed, true);
-  start(L, 4); L.adv(1); assert.strictEqual(L.out[0], 'Intro'); L.adv(15);
+  start(L, 4); L.adv(1); assert.strictEqual(L.out[0], 'INTRO'); L.adv(15);
   assert.deepStrictEqual(seq(L), [4, 8]); L.adv(32);
   assert.deepStrictEqual(seq(L), [4, 8, 12]); L.adv(1); L.ctx.toggle(); L.adv(31);
   assert.deepStrictEqual(seq(L), [4, 8, 12, 10]);
 });
 test('Scene names match despite case and spaces', () => {
   const L = makeLive({ names: { 14: ' chorus 1 ' } }); assert.strictEqual(L.ctx.S.armed, true); start(L, 14); L.adv(1);
-  assert.strictEqual(L.out[0], 'Chorus 1');
+  assert.strictEqual(L.out[0], 'CHORUS 1');
 });
 test('A missing song scene name disarms and names the scene; nothing launches', () => {
   const L = makeLive({ names: { 14: 'CHORUS ONE' } }); assert.strictEqual(L.ctx.S.armed, false);
@@ -274,7 +274,7 @@ test('A missing alternative JAM only warns', () => {
 });
 test('The alternative JAM is followed as JAM of its section', () => {
   const L = makeLive({ lens: { 3: 16 } }); start(L, 3); L.adv(1);
-  assert.strictEqual(L.out[0], 'Intro'); assert.strictEqual(L.out[1], 'JAM');
+  assert.strictEqual(L.out[0], 'INTRO'); assert.strictEqual(L.out[1], 'JAM');
 });
 test('Insert a scene, then RESCAN when stopped: scenes are found at their new numbers', () => {
   const L = makeLive({ lens: { 6: 16 } }); L.names[9999 - 999] = ''; L.insertScene(); L.ctx.tick();
@@ -294,7 +294,7 @@ function makeWindow(size, opts = {}) {
   if (opts.missing) delete objs[opts.missing];
   const logs = [];
   const wind = { visible: opts.visible !== false, size };
-  const ctx = vm.createContext({ Math, Error, Array: Array, post: s => logs.push(s),
+  const ctx = vm.createContext({ jsarguments: ['big_window.js', 720, 505, 'title', 'song', 'jam', 'cancel', 'prev', 'next', 'cap_0', 'val_0', 'cap_2', 'val_2', 'cap_3', 'val_3', 'val_4'], Math, Error, Array: Array, post: s => logs.push(s),
     patcher: { wind, getnamed: n => objs[n] || null } });
   vm.runInContext(fs.readFileSync(path.join(__dirname, '../device/big_window.js'), 'utf8'), ctx);
   return { ctx, objs, wind, logs };
@@ -351,4 +351,111 @@ test('Title: moved by a scene change, it is found again on RESCAN', () => {
 test('Title: never part of the song, so PREV from Intro is still refused', () => {
   const L = makeLive({ names: { 2: 'SONG: SUPERFLY' }, lens: { 6: 16 } }); start(L, 6); L.adv(1); L.ctx.prev(); L.adv(1);
   assert.deepStrictEqual(seq(L), [6]); assert.ok(L.out[4].startsWith('BEGINNING'));
+});
+
+// ---- mixer.js ----
+function makeMixer(tracks, opts = {}) {
+  const log = [], objs = {}, posts = [];
+  const obj = n => objs[n] || (objs[n] = { hidden: 0, msgs: {}, message(m, ...a) { this.msgs[m] = a; } });
+  const watchers = [];
+  const ok = /^live_set tracks (\d+)$/, slot = /^live_set tracks (\d+) clip_slots (\d+)$/;
+  class LiveAPI {
+    constructor(cb, p) { this.cb = cb; this.goto(p); }
+    goto(p) { this.path = p; const m = ok.exec(p); this.id = m ? 100 + +m[1] : 1; }
+    set property(v) { this._p = v; if (v) watchers.push(this); else watchers.splice(watchers.indexOf(this), 1); }
+    get property() { return this._p; }
+    getcount() { return tracks.length; }
+    getstring() { return tracks[+ok.exec(this.path)[1]].name; }
+    get(n) {
+      let m;
+      if (this.path === 'live_set') return tracks.flatMap((t, i) => ['id', t.id || 100 + i]);
+      if ((m = slot.exec(this.path))) return [(tracks[+m[1]].clips || []).includes(+m[2]) ? 1 : 0];
+      const t = tracks[+ok.exec(this.path)[1]];
+      if (n === 'group_track') return ['id', t.parent === undefined ? 0 : 100 + t.parent];
+      if (n === 'is_foldable') return [t.group ? 1 : 0];
+      if (n === 'mute') return [t.mute ? 1 : 0];
+      if (n === 'playing_slot_index') return [t.playing ? 0 : -1];
+      throw new Error('get ' + n);
+    }
+    set(n, v) { const i = +ok.exec(this.path)[1]; tracks[i].mute = v; log.push(['mute', i, v]);
+      watchers.filter(w => w._p === 'mute' && w.path === this.path).forEach(w => w.cb(['mute', v])); }
+    call(f) { log.push([f, this.path]); }
+  }
+  const sent = [];
+  const ctx = vm.createContext({ LiveAPI, Math, String, post: s => posts.push(s), outlet: (...a) => sent.push(a), patcher: { getnamed: obj, wind: { visible: opts.visible !== false, size: [1120, 280] } } });
+  vm.runInContext(fs.readFileSync(path.join(__dirname, '../device/mixer.js'), 'utf8'), ctx);
+  return { ctx, log, obj, posts, tracks, watchers, sent };
+}
+const SET = () => [{ name: 'DRUMS', group: 1 }, { name: 'KICK', parent: 0, clips: [3, 7] }, { name: 'SNARE', parent: 0, clips: [7] },
+  { name: 'BASS', group: 1, mute: 1 }, { name: 'SUB', parent: 3, clips: [3] }, { name: 'LOOSE', clips: [3] }, { name: 'SONG-JAM' }];
+const AMBER = '1,0.69,0,1', OFFC = '0.17,0.17,0.17,1';
+test('Mixer: makes strips from group tracks only, and hides spares', () => {
+  const M = makeMixer(SET()); M.ctx.opened();
+  assert.deepStrictEqual(M.obj('name_0').msgs.set, ['DRUMS']); assert.deepStrictEqual(M.obj('name_1').msgs.set, ['BASS']);
+  assert.strictEqual(M.obj('play_1').hidden, 0); assert.strictEqual(M.obj('play_2').hidden, 1);
+});
+test('Mixer: does nothing to Live before the window is opened', () => {
+  const M = makeMixer(SET()); M.ctx.scene(4); M.ctx.play(0); M.ctx.stop(0); M.ctx.mute(0); M.ctx.poll();
+  assert.deepStrictEqual(M.log, []); assert.strictEqual(M.watchers.length, 0);
+});
+test('Mixer: PLAY fires only clips of this group in the current scene, skipping empty slots', () => {
+  const M = makeMixer(SET()); M.ctx.opened(); M.ctx.scene(4); M.ctx.play(0);
+  assert.deepStrictEqual(M.log, [['fire', 'live_set tracks 1 clip_slots 3']]);
+});
+test('Mixer: PLAY with no current section launches nothing, and says so', () => {
+  const M = makeMixer(SET()); M.ctx.opened(); M.ctx.scene(0); M.ctx.play(0);
+  assert.deepStrictEqual(M.log, []); assert.ok(M.obj('status').msgs.set[0].startsWith('PLAY:'));
+});
+test('Mixer: STOP stops each track in the group and no others', () => {
+  const M = makeMixer(SET()); M.ctx.opened(); M.ctx.stop(0);
+  assert.deepStrictEqual(M.log, [['stop_all_clips', 'live_set tracks 1'], ['stop_all_clips', 'live_set tracks 2']]);
+});
+test('Mixer: M toggles the group track, and the lamp follows Live', () => {
+  const M = makeMixer(SET()); M.ctx.opened();
+  assert.strictEqual(M.obj('mute_1').msgs.activebgcolor.join(), AMBER); assert.strictEqual(M.obj('mute_0').msgs.activebgcolor.join(), OFFC);
+  M.ctx.mute(0); assert.deepStrictEqual(M.log, [['mute', 0, 1]]); assert.strictEqual(M.obj('mute_0').msgs.activebgcolor.join(), AMBER);
+  M.ctx.mute(0); assert.strictEqual(M.obj('mute_0').msgs.activebgcolor.join(), OFFC);
+});
+test('Mixer: PLAY lamp follows playing tracks, and polling stops when the window is closed', () => {
+  const M = makeMixer(SET()); M.ctx.opened(); M.tracks[2].playing = 1;
+  M.ctx.poll(); M.ctx.poll(); assert.strictEqual(M.obj('play_0').msgs.activetextcolor.join(), '0.36,0.82,0.62,1');
+  const C = makeMixer(SET()); C.ctx.opened(); C.tracks[2].playing = 1; C.ctx.patcher.wind.visible = false; C.ctx.poll(); C.ctx.poll();
+  assert.strictEqual(C.obj('play_0').msgs.activetextcolor.join(), '0.6,0.6,0.6,1');
+});
+test('Mixer: nested groups belong to the outermost group', () => {
+  const M = makeMixer([{ name: 'ALL', group: 1 }, { name: 'SUB', group: 1, parent: 0 }, { name: 'A', parent: 1, clips: [0] }]);
+  M.ctx.opened(); assert.strictEqual(M.obj('play_1').hidden, 1); M.ctx.stop(0); assert.deepStrictEqual(M.log, [['stop_all_clips', 'live_set tracks 2']]);
+});
+test('Mixer: more than 12 groups shows the first 12 and logs it', () => {
+  const M = makeMixer(Array.from({ length: 14 }, (_, i) => ({ name: 'G' + i, group: 1 }))); M.ctx.opened();
+  assert.deepStrictEqual(M.obj('name_11').msgs.set, ['G11']); assert.ok(M.posts[0].includes('14 groups'));
+});
+test('Router: sends the current scene to the mixer, once per change', () => {
+  const L = makeLive({ lens: { 14: 32 } }); start(L, 14); L.adv(1); assert.strictEqual(L.out[7], 14);
+  L.adv(32); assert.strictEqual(L.out[7], 17); L.stop(); assert.strictEqual(L.out[7], 0);
+});
+const GROUPS = n => Array.from({ length: n }, (_, i) => ({ name: 'G' + i, group: 1 }));
+test('Mixer window: fits the number of groups, with no blank space', () => {
+  const M = makeMixer(GROUPS(9)); M.ctx.opened();
+  assert.deepStrictEqual(Array.from(M.ctx.patcher.wind.size), [850, 280]); assert.deepStrictEqual(M.sent[0], [0, 'design', 850]);
+});
+test('Mixer window: last strip ends one margin from the edge', () => {
+  const M = makeMixer(GROUPS(9)); M.ctx.opened();
+  assert.strictEqual(10 + 8 * 92.5 + 90 + 10, M.ctx.patcher.wind.size[0]);
+});
+test('Mixer window: reopening keeps a size the user chose', () => {
+  const M = makeMixer(GROUPS(9)); M.ctx.opened(); M.ctx.patcher.wind.size = [1700, 560]; M.ctx.opened();
+  assert.deepStrictEqual(Array.from(M.ctx.patcher.wind.size), [1700, 560]); assert.strictEqual(M.sent.length, 1);
+});
+test('Mixer window: a change in groups keeps the zoom', () => {
+  const tracks = GROUPS(9); const M = makeMixer(tracks); M.ctx.opened(); M.ctx.patcher.wind.size = [1700, 560];
+  tracks.pop(); M.ctx.opened();
+  assert.deepStrictEqual(Array.from(M.ctx.patcher.wind.size), [1515, 560]);
+});
+test('Mixer window: stays wide enough for its status text with few groups', () => {
+  const M = makeMixer(GROUPS(1)); M.ctx.opened(); assert.strictEqual(M.ctx.patcher.wind.size[0], 295);
+});
+test('Window scaling: a new design width fills the window without stretching', () => {
+  const W = makeWindow([850, 505]); W.ctx.design(850); W.ctx.poll();
+  assert.deepStrictEqual(W.objs.jam.rect, [365, 20, 335, 110]); assert.strictEqual(W.objs.jam.font, 44);
 });

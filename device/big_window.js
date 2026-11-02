@@ -1,5 +1,7 @@
-// Scales the large window's contents to fit the window. No Live API access and no shared
-// state with song_jam_router.js, so a layout problem here cannot affect scene launching.
+// Scales a window's contents to fit the window. Used by the large window and the mixer.
+// Arguments: design width, design height, then the varnames of the objects to scale.
+// No Live API access and no shared state with song_jam_router.js, so a layout problem here
+// cannot affect scene launching.
 // Called about 7 times a second once the window has been opened. It does nothing unless
 // the window is visible and its size has changed. ES5 only.
 
@@ -7,10 +9,10 @@ autowatch = 0;
 inlets = 1;
 outlets = 1;
 
-var DESIGN_W = 720, DESIGN_H = 505; // must match "rect" of the BigView patcher
+var DESIGN_W = jsarguments[1], DESIGN_H = jsarguments[2]; // must match the patcher's "rect"
 var MIN_FONT = 8;
-var NAMES = ["title", "song", "jam", "cancel", "prev", "next",
-	"cap_0", "val_0", "cap_2", "val_2", "cap_3", "val_3", "val_4"];
+var NAMES = [];
+for (var a = 3; a < jsarguments.length; a++) NAMES.push(jsarguments[a]);
 
 var base = null; // varname -> { obj, rect, font }, read once from the patch
 var lastW = 0, lastH = 0;
@@ -39,6 +41,12 @@ function layout(w, h) {
 		]);
 		b.obj.setattr("fontsize", Math.max(MIN_FONT, Math.round(b.font * fontScale)));
 	}
+}
+
+// Changes the width the layout treats as full size, and redraws on the next poll.
+function design(width) {
+	DESIGN_W = width;
+	lastW = 0;
 }
 
 function poll() {

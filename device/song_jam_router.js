@@ -11,7 +11,7 @@
 
 autowatch = 0;
 inlets = 1;
-outlets = 7; // 0 section, 1 mode, 2 pending, 3 bars, 4 status, 5 lamp colours, 6 song title
+outlets = 8; // 0 section, 1 mode, 2 pending, 3 bars, 4 status, 5 lamp colours, 6 song title, 7 current scene
 setoutletassist(0, "section text");
 setoutletassist(1, "mode text");
 setoutletassist(2, "pending text");
@@ -19,6 +19,7 @@ setoutletassist(3, "bars text");
 setoutletassist(4, "status text");
 setoutletassist(5, "lamp colours");
 setoutletassist(6, "song title text");
+setoutletassist(7, "current scene number, for the mixer");
 
 // ---------------------------- CONFIGURATION ----------------------------------
 // Scenes are found by name at load and on RESCAN, so moving them is safe. Matching ignores
@@ -27,16 +28,16 @@ setoutletassist(6, "song title text");
 // jamAltScene: an alternative JAM scene. Launch it by hand and the router follows it.
 //              To make it the default, swap the values of jamScene and jamAltScene.
 var SECTIONS = [
-	{ name: "Intro", jamScene: "INTRO-JAM-2", songScene: "INTRO", jamAltScene: "INTRO-JAM-1", songBars: 0, jamBars: 0 },
-	{ name: "Verse 1", jamScene: "VERSE-1-JAM", songScene: "VERSE 1", jamAltScene: "", songBars: 0, jamBars: 0 },
-	{ name: "Chorus 1", jamScene: "CHORUS-1-JAM", songScene: "CHORUS 1", jamAltScene: "", songBars: 0, jamBars: 0 },
-	{ name: "Verse Interlude", jamScene: "VERSE-INTERLUDE-JAM", songScene: "VERSE INTERLUDE", jamAltScene: "", songBars: 0, jamBars: 0 },
-	{ name: "Verse 2", jamScene: "VERSE-2-JAM", songScene: "VERSE 2", jamAltScene: "", songBars: 0, jamBars: 0 },
-	{ name: "Chorus 2", jamScene: "CHORUS-2-JAM", songScene: "CHORUS 2", jamAltScene: "", songBars: 0, jamBars: 0 },
-	{ name: "Breakdown", jamScene: "BREAKDOWN-JAM", songScene: "BREAKDOWN", jamAltScene: "", songBars: 0, jamBars: 0 },
-	{ name: "Chorus 3", jamScene: "CHORUS-3-JAM", songScene: "CHORUS 3", jamAltScene: "CHORUS-3-DRUM-AND-BASS", songBars: 0, jamBars: 0 },
-	{ name: "Outro 1", jamScene: "OUTRO-1-JAM", songScene: "OUTRO 1", jamAltScene: "", songBars: 0, jamBars: 0 },
-	{ name: "Outro 2", jamScene: "OUTRO-JAM", songScene: "OUTRO 2", jamAltScene: "", songBars: 0, jamBars: 0 }
+	{ name: "INTRO", jamScene: "INTRO-JAM-2", songScene: "INTRO", jamAltScene: "INTRO-JAM-1", songBars: 0, jamBars: 0 },
+	{ name: "VERSE 1", jamScene: "VERSE-1-JAM", songScene: "VERSE 1", jamAltScene: "", songBars: 0, jamBars: 0 },
+	{ name: "CHORUS 1", jamScene: "CHORUS-1-JAM", songScene: "CHORUS 1", jamAltScene: "", songBars: 0, jamBars: 0 },
+	{ name: "VERSE INTERLUDE", jamScene: "VERSE-INTERLUDE-JAM", songScene: "VERSE INTERLUDE", jamAltScene: "", songBars: 0, jamBars: 0 },
+	{ name: "VERSE 2", jamScene: "VERSE-2-JAM", songScene: "VERSE 2", jamAltScene: "", songBars: 0, jamBars: 0 },
+	{ name: "CHORUS 2", jamScene: "CHORUS-2-JAM", songScene: "CHORUS 2", jamAltScene: "", songBars: 0, jamBars: 0 },
+	{ name: "BREAKDOWN", jamScene: "BREAKDOWN-JAM", songScene: "BREAKDOWN", jamAltScene: "", songBars: 0, jamBars: 0 },
+	{ name: "CHORUS 3", jamScene: "CHORUS-3-JAM", songScene: "CHORUS 3", jamAltScene: "CHORUS-3-DRUM-AND-BASS", songBars: 0, jamBars: 0 },
+	{ name: "OUTRO 1", jamScene: "OUTRO-1-JAM", songScene: "OUTRO 1", jamAltScene: "", songBars: 0, jamBars: 0 },
+	{ name: "OUTRO 2", jamScene: "OUTRO-JAM", songScene: "OUTRO 2", jamAltScene: "", songBars: 0, jamBars: 0 }
 ];
 // A scene named with this tag sets the displayed song title: "SONG: SUPERFLY" shows SUPERFLY.
 // It is display only, so the router never launches that scene.
@@ -62,6 +63,7 @@ var MAP = {}; // scene number -> { sec, kind: "song"|"jam", beats }
 var S = {};
 var lastOut = [];
 var lastLamp = {};
+var lastScene = -1;
 var tally = { song: {}, jam: {} }; // clip colour counts from the scan
 var palette = { song: FALLBACK_COLORS.song, jam: FALLBACK_COLORS.jam };
 
@@ -88,7 +90,7 @@ function previousSong(sec) { return sec > 0 ? SECTIONS[sec - 1].song : 0; }
 function sceneLabel(n) {
 	var m = MAP[n];
 	if (!m) return "scene " + n;
-	return SECTIONS[m.sec].name + (m.kind === "jam" ? " JAM" : "") + " (" + n + ")";
+	return SECTIONS[m.sec].name + (m.kind === "jam" ? " JAM" : "");
 }
 function barBeats() {
 	var s = songApi;
@@ -520,6 +522,7 @@ function send(i, text) {
 }
 function render(now) {
 	send(6, S.title || "--");
+	if (lastScene !== S.cur) { lastScene = S.cur; outlet(7, "scene", S.cur); }
 	send(0, S.cur ? SECTIONS[S.sec].name : "--");
 	send(1, S.mode === "song" ? "SONG" : (S.mode === "jam" ? "JAM" : "--"));
 	var pending, bars = "--";
@@ -552,6 +555,7 @@ function init() {
 	S.enabled = enabledWas;
 	lastOut = [];
 	lastLamp = {};
+	lastScene = -1;
 	api = new LiveAPI(function () { }, "live_set");
 	songApi = new LiveAPI(function () { }, "live_set");
 	scan();

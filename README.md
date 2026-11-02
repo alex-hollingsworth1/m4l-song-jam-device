@@ -4,8 +4,10 @@ Quantised SONG/JAM scene router for one live set. **Not performance-ready until 
 
 ## Files
 - `device/SongJamRouter.amxd`: the device (MIDI effect)
-- `device/big_window.js`: scales the large window's contents. It has no Live API access
-- `device/song_jam_router.js`: all the logic. The scene-name table and bar lengths are at the top
+- `device/big_window.js`: scales the large window and mixer contents. It has no Live API access
+- `device/mixer.js`: the mixer window's logic
+- `device/icon_play.svg`, `device/icon_stop.svg`: the mixer's button icons
+- `device/song_jam_router.js`: the router's logic. The scene-name table and bar lengths are at the top
 - `tools/build_device.py`: regenerates the `.amxd`. Only needed to change the patch layout
 - `test/simulate.js`: logic tests against a fake Live
 
@@ -35,10 +37,10 @@ Nothing touches the current clips until that fire, so a mode change can't restar
 - **Scene names.** The table finds scenes by their exact names. Any change to the scene list disarms the router until you stop and press RESCAN, or undo. Renaming a mapped scene, or giving two scenes the same name, leaves it disarmed and names the problem scene. Update `SECTIONS` if you rename one.
 
 ## Install
-1. Copy `device/SongJamRouter.amxd`, `device/song_jam_router.js` **and** `device/big_window.js` into one folder in your User Library.
+1. Copy `device/SongJamRouter.amxd`, `device/song_jam_router.js`, `device/big_window.js`, `device/mixer.js`, `device/icon_play.svg` **and** `device/icon_stop.svg` into one folder in your User Library.
 2. Drag the device onto a MIDI track. It passes MIDI through unchanged, so any spare MIDI track is fine, but don't put it on a track you might delete.
-3. Click the device's Edit button, click **Freeze** in the Max toolbar, and save. This embeds both JS files, so the device no longer needs them separately.
-4. In the Max editor window, open Window > Max Console and read the scan table: `ROUTER song Intro | scene 4 'INTRO' | 16 bars (auto) | n clips`. Check that every scene name and bar count is right, and clear every `ROUTER WARN`.
+3. Click the device's Edit button, click **Freeze** in the Max toolbar, and save. This embeds all the JS and icon files, so the device no longer needs them separately.
+4. In the Max editor window, open Window > Max Console and read the scan table: `ROUTER song INTRO | scene 4 'INTRO' | 16 bars (auto) | n clips`. Check that every scene name and bar count is right, and clear every `ROUTER WARN`.
 5. To change lengths, edit `SECTIONS`, save, then reload the device (or re-freeze if already frozen).
 
 The device sets Global Quantization to 1 Bar on load, and again before any launch if it has changed.
@@ -58,6 +60,21 @@ Name any scene `SONG: <title>`, and the device and large window show the title. 
 - Lamp colours are the most common scene colour across the song and JAM scenes, read at scan and printed to the Max Console as `ROUTER lamp colours`. To set them by hand, use `SONG_COLOR` / `JAM_COLOR` in the JS.
 - **OPEN WINDOW** opens a large always-on-top window with the same information, plus SONG, JAM, CANCEL, PREV and NEXT. MIDI mapping is done on the device's buttons, and these also drive the window.
 - **Resizing:** drag the window's edge and the contents scale to fit, including text size. Live fixes the device strip's height, so only the large window resizes.
+
+## Mixer
+**MIXER** on the device opens a window with one strip per top-level group track, up to 12. The strips come from the running set through the Live API, so there's nothing to configure. `mixer.js` is separate from the router and receives only the current scene number. It makes no Live API calls until the window is first opened.
+
+| Button | What it does |
+|---|---|
+| **PLAY** (triangle) | Launches the group's clips from the current section's scene, at the next bar line. Empty slots are skipped. Green while the group is playing |
+| **STOP** (square) | Stops the clips on every track in the group |
+| **M** | Mutes the group track. Amber while muted |
+
+- **Window:** it sizes itself to the number of groups, and scales when you resize it. A size you've chosen stays until the number of groups changes. Reopening it refreshes track names.
+- **Mid-section changes:** use M. PLAY starts clips from their beginning, so a group started mid-section can be out of phase until the next scene launch.
+- **STOP is temporary:** the next scene launch brings the group's clips back. The docs don't say whether STOP waits for Global Quantization, so it may cut immediately.
+- **M persists:** it stays on through scene changes and is saved with the set, so a forgotten mute silently kills that group.
+- **Stopping every group:** the router sees nothing playing at the next boundary and returns to waiting, so you'd need to launch a scene.
 
 ## Behaviour decisions
 - **Toggle press:** requests the other mode. A second press before the boundary cancels it, as does CANCEL.
@@ -84,7 +101,8 @@ Use a copy of the set, with a click on or audible clips, and the Max Console ope
 9. **Set changes.** Insert a scene (status must show `SCENES CHANGED`), undo, then RESCAN. Also load a different set and reopen this one.
 10. **Mapping.** Test your actual pedal: one action per press, including holding it down.
 11. **Lamps and window.** Confirm the lamp colours match the clips, that blinking works, and that the window stays on top and clicks work. Resize it small, large, tall and wide, including during playback, and confirm buttons still click and a transition still lands on time. Close and reopen it mid-song and confirm it shows current values and the transition still lands on time.
-12. **Full run.** Play the whole song at gig tempo with your audio interface and any other devices running, using JAM on at least three sections. Then save the set, reopen it, and run it again.
+12. **Mixer.** Open it and confirm one strip per group, centred names, the icons and no blank space on the right. During playback, try M, then STOP (note whether it waits for the bar line), then PLAY (listen for whether it's in time). Confirm a scene launch brings a stopped group back, and that a transition still lands on time with the window open.
+13. **Full run.** Play the whole song at gig tempo with your audio interface and any other devices running, using JAM on at least three sections. Then save the set, reopen it, and run it again.
 
 ## Limitations
 - `OUTRO 2` and `OUTRO-JAM` are 42 beats, or 10.5 bars in 4/4, so the scan warns about them. A switch between them lands on the bar line after the 10.5-bar point.

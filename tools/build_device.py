@@ -86,25 +86,120 @@ def label(box_id, text, rect, y, size=10.0):
     )
 
 
+WINDOW_BG = [0.09, 0.09, 0.09, 1.0]
+WHITE, GREY = [1.0, 1.0, 1.0, 1.0], [0.6, 0.6, 0.6, 1.0]
+
+
+def text(box_id, value, rect, y, size, color, **extra):
+    add(box_id, maxclass="comment", text=value, numinlets=1, numoutlets=0, fontname=FONT, fontsize=size,
+        textcolor=color, varname=box_id, patching_rect=[800, y, 200, 20],
+        presentation=1, presentation_rect=rect, **extra)
+
+
+def big_button(box_id, value, rect, x, size, m, patch_y=300, **extra):
+    add(box_id, maxclass="live.text", text=value, texton=value, mode=0, numinlets=1, numoutlets=2,
+        outlettype=["", ""], parameter_enable=0, fontname=FONT, fontsize=size, varname=box_id,
+        patching_rect=[x, patch_y, 80, 20], presentation=1, presentation_rect=rect, **extra)
+    msg("m_" + box_id, m, x, patch_y + 40)
+    wire(box_id, "m_" + box_id)
+    wire("m_" + box_id, "out")
+
+
+def icon(svg):
+    """live.text attributes that draw an SVG in the button's text colour."""
+    return {"usepicture": 1, "pictures": [svg, svg], "remapsvgcolors": 1,
+            "usesvgviewbox": 1, "activetextcolor": GREY, "activetextoncolor": WHITE}
+
+
+def window_patcher(width, height, x=200.0, y=120.0):
+    return {
+        "fileversion": 1,
+        "appversion": {"major": 9, "minor": 1, "revision": 5, "architecture": "x64", "modernui": 1},
+        "classnamespace": "box",
+        "rect": [x, y, float(width), float(height)],
+        "openinpresentation": 1,
+        "bgcolor": WINDOW_BG, "editing_bgcolor": WINDOW_BG, "locked_bgcolor": WINDOW_BG,
+        "toolbarvisible": 0, "statusbarvisible": 0,
+        "default_fontsize": 12.0,
+        "default_fontname": FONT,
+        "boxes": boxes,
+        "lines": lines,
+    }
+
+
+def scaling(width, height, names, x):
+    """Scales the named objects with the window. Starts when the window is first opened."""
+    msg("m_win_on", "1", x, 60)
+    obj("win_metro", "metro 150", 2, 1, x, 95, ["bang"])
+    obj("win_defer", "deferlow", 1, 1, x, 125)
+    msg("m_poll", "poll", x, 155)
+    obj("win_js", f"js big_window.js {width} {height} " + " ".join(names), 1, 1, x, 185)
+    wire("in_cfg", "m_win_on")
+    wire("m_win_on", "win_metro")
+    wire("win_metro", "win_defer")
+    wire("win_defer", "m_poll")
+    wire("m_poll", "win_js")
+
+
+def mixer_view():
+    """The mixer window. mixer.js finds the group tracks and hides any unused strips."""
+    global boxes, lines
+    outer_boxes, outer_lines = boxes, lines
+    boxes, lines = [], []
+    width, height, strip_w = 1120, 280, 90
+    add("in_pc", maxclass="inlet", numinlets=0, numoutlets=1, outlettype=[""], patching_rect=[10, 10, 30, 30])
+    add("in_cfg", maxclass="inlet", numinlets=0, numoutlets=1, outlettype=[""], patching_rect=[60, 10, 30, 30])
+    add("in_scene", maxclass="inlet", numinlets=0, numoutlets=1, outlettype=[""], patching_rect=[110, 10, 30, 30])
+    add("out", maxclass="outlet", numinlets=1, numoutlets=0, patching_rect=[10, 240, 30, 30])
+    msg("m_cfg", 'presentation 1, topmost 1, title "Song Jam Mixer"', 60, 60)
+    obj("thispatcher", "thispatcher", 1, 2, 60, 95, ["", ""])
+    wire("in_cfg", "m_cfg")
+    wire("m_cfg", "thispatcher")
+
+    obj("mix_js", "js mixer.js", 1, 1, 210, 190)
+    msg("m_opened", "opened", 210, 60)
+    msg("m_mix_on", "1", 300, 60)
+    obj("mix_metro", "metro 200", 2, 1, 300, 95, ["bang"])
+    obj("mix_defer", "deferlow", 1, 1, 300, 125)
+    msg("m_mix_poll", "poll", 300, 155)
+    wire("in_cfg", "m_opened")
+    wire("m_opened", "mix_js")
+    wire("in_cfg", "m_mix_on")
+    wire("m_mix_on", "mix_metro")
+    wire("mix_metro", "mix_defer")
+    wire("mix_defer", "m_mix_poll")
+    wire("m_mix_poll", "mix_js")
+    wire("in_scene", "mix_js")
+    # Tells the scaling script the layout width, once scaling() below has created it.
+
+    names = ["status"]
+    for i in range(12):
+        x = 10 + i * (strip_w + 2.5)
+        text(f"name_{i}", "--", [x, 10, strip_w, 40], 300 + i * 25, 12.0, WHITE, textjustification=1)
+        big_button(f"play_{i}", "PLAY", [x, 54, strip_w, 58], 600 + i * 100, 14.0, f"play {i}", 300, **icon("icon_play.svg"))
+        big_button(f"stop_{i}", "STOP", [x, 118, strip_w, 58], 600 + i * 100, 14.0, f"stop {i}", 400, **icon("icon_stop.svg"))
+        big_button(f"mute_{i}", "M", [x, 182, strip_w, 58], 600 + i * 100, 18.0, f"mute {i}", 500)
+        names += [f"name_{i}", f"play_{i}", f"stop_{i}", f"mute_{i}"]
+    text("status", "", [10, 246, 420, 26], 280, 13.0, GREY)
+    scaling(width, height, names, 400)
+    wire("mix_js", "win_js")
+
+    # Buttons reach the script directly rather than through the patcher's outlet.
+    lines[:] = [l for l in lines if l["patchline"]["destination"][0] != "out"]
+    for b in boxes:
+        if b["box"]["id"].startswith("m_") and b["box"]["id"][2:7] in ("play_", "stop_", "mute_"):
+            wire(b["box"]["id"], "mix_js")
+
+    sub = window_patcher(width, height, 120.0, 420.0)
+    boxes, lines = outer_boxes, outer_lines
+    return sub
+
+
 def big_view():
     """The large window's patcher, built with its own box and line lists."""
     global boxes, lines
     outer_boxes, outer_lines = boxes, lines
     boxes, lines = [], []
-    bg, white, grey = [0.09, 0.09, 0.09, 1.0], [1.0, 1.0, 1.0, 1.0], [0.6, 0.6, 0.6, 1.0]
-
-    def text(box_id, value, rect, y, size, color):
-        add(box_id, maxclass="comment", text=value, numinlets=1, numoutlets=0, fontname=FONT, fontsize=size,
-            textcolor=color, varname=box_id, patching_rect=[800, y, 200, 20],
-            presentation=1, presentation_rect=rect)
-
-    def big_button(box_id, value, rect, x, size, m):
-        add(box_id, maxclass="live.text", text=value, texton=value, mode=0, numinlets=1, numoutlets=2,
-            outlettype=["", ""], parameter_enable=0, fontname=FONT, fontsize=size, varname=box_id, patching_rect=[x, 300, 80, 20],
-            presentation=1, presentation_rect=rect)
-        msg("m_" + box_id, m, x, 340)
-        wire(box_id, "m_" + box_id)
-        wire("m_" + box_id, "out")
 
     # Inlet order follows x position. Inlet 0 belongs to pcontrol, inlet 1 configures the window.
     add("in_pc", maxclass="inlet", numinlets=0, numoutlets=1, outlettype=[""], patching_rect=[10, 10, 30, 30])
@@ -118,17 +213,8 @@ def big_view():
     wire("in_cfg", "m_cfg")
     wire("m_cfg", "thispatcher")
 
-    # Layout scaling, separate from the router. Starts when the window is first opened.
-    msg("m_win_on", "1", 400, 60)
-    obj("win_metro", "metro 150", 2, 1, 400, 95, ["bang"])
-    obj("win_defer", "deferlow", 1, 1, 400, 125)
-    msg("m_poll", "poll", 400, 155)
-    obj("win_js", "js big_window.js", 1, 1, 400, 185)
-    wire("in_cfg", "m_win_on")
-    wire("m_win_on", "win_metro")
-    wire("win_metro", "win_defer")
-    wire("win_defer", "m_poll")
-    wire("m_poll", "win_js")
+    scaling(720, 505, ["title", "song", "jam", "cancel", "prev", "next", "cap_0", "val_0",
+                       "cap_2", "val_2", "cap_3", "val_3", "val_4"], 400)
 
     big_button("song", "SONG", [20, 80, 335, 110], 10, 44.0, "reqsong")
     big_button("jam", "JAM", [365, 80, 335, 110], 100, 44.0, "reqjam")
@@ -144,27 +230,15 @@ def big_view():
     for cap, y, size, h, i in rows:
         if cap == "Mode":   # already shown by the lit lamp; kept wired so all outlets are handled
             continue
-        text(f"cap_{i}", cap, [20, y + 8, 110, 24], 40 + i * 25, 16.0, grey)
-        text(f"val_{i}", "--", [130, y, 570, h], 52 + i * 25, size, white)
+        text(f"cap_{i}", cap, [20, y + 8, 110, 24], 40 + i * 25, 16.0, GREY)
+        text(f"val_{i}", "--", [130, y, 570, h], 52 + i * 25, size, WHITE)
         wire(f"in_{i}", f"val_{i}")
-    text("val_4", "", [20, 395, 680, 30], 170, 15.0, grey)
+    text("val_4", "", [20, 395, 680, 30], 170, 15.0, GREY)
     wire("in_4", "val_4")
-    text("title", "--", [20, 12, 680, 58], 195, 36.0, white)
+    text("title", "--", [20, 12, 680, 58], 195, 36.0, WHITE)
     wire("in_6", "title")
 
-    sub = {
-        "fileversion": 1,
-        "appversion": {"major": 9, "minor": 1, "revision": 5, "architecture": "x64", "modernui": 1},
-        "classnamespace": "box",
-        "rect": [200.0, 120.0, 720.0, 505.0],
-        "openinpresentation": 1,
-        "bgcolor": bg, "editing_bgcolor": bg, "locked_bgcolor": bg,
-        "toolbarvisible": 0, "statusbarvisible": 0,
-        "default_fontsize": 12.0,
-        "default_fontname": FONT,
-        "boxes": boxes,
-        "lines": lines,
-    }
+    sub = window_patcher(720, 505)
     boxes, lines = outer_boxes, outer_lines
     return sub
 
@@ -183,7 +257,7 @@ obj("metro", "metro 50", 2, 1, 290, 95, ["bang"])
 obj("defer", "deferlow", 1, 1, 290, 125)
 msg("m_tick", "tick", 290, 155)
 obj("p_enabled", "prepend enabled", 1, 1, 400, 60)
-obj("js", "js song_jam_router.js", 1, 7, 200, 230)
+obj("js", "js song_jam_router.js", 1, 8, 200, 230)
 wire("thisdevice", "m_init")
 wire("thisdevice", "m_on")
 wire("m_on", "metro")
@@ -243,6 +317,22 @@ wire("defer_open", "big", 0, 1)
 for i in range(7):
     wire("js", "big", i, i + 2)
 wire("big", "js")
+
+# Mixer window, opened the same way. It stays idle until first opened.
+button("b_mixer", "MIXER", "Open Mixer", "Mixer", [6, 149, 96, 18], 740)
+add("mixer", maxclass="newobj", text="p Mixer", numinlets=3, numoutlets=1, outlettype=[""],
+    patching_rect=[340, 400, 300, 22], patcher=mixer_view())
+msg("m_mix_open", "open", 740, 340)
+obj("mix_pcontrol", "pcontrol", 1, 1, 740, 370)
+obj("t_mix", "t b b", 1, 2, 830, 340, ["bang", "bang"])
+obj("defer_mix", "deferlow", 1, 1, 830, 370)
+wire("b_mixer", "t_mix")
+wire("t_mix", "defer_mix", 0)
+wire("t_mix", "m_mix_open", 1)
+wire("m_mix_open", "mix_pcontrol")
+wire("mix_pcontrol", "mixer")
+wire("defer_mix", "mixer", 0, 1)
+wire("js", "mixer", 7, 2)
 
 patcher = {
     "fileversion": 1,
