@@ -1,6 +1,6 @@
-// Mixer window: one strip per top-level group track, found from the Live Set.
-// Separate from song_jam_router.js. It receives only the current scene number, and does
-// nothing until the window is first opened. ES5 only.
+// Mixer: one strip per top-level group track, found from the Live Set. Shown in its own
+// window, plus a MIDI-mappable mute button per group in the device view. Separate from
+// song_jam_router.js, from which it receives only the current scene number. ES5 only.
 
 autowatch = 0;
 inlets = 1;
@@ -12,7 +12,7 @@ var STRIP_PITCH = 92.5, SIDE_MARGIN = 10, STRIP_GAP = 2.5, MIN_COLUMNS = 3;
 var designWidth = 1120; // the window's width as built
 var fittedCount = -1;
 var ICON_PLAYING = [0.36, 0.82, 0.62, 1]; // Live's transport play green
-var COLOR_MUTED = [1.0, 0.69, 0.0, 1];
+var COLOR_ACTIVE = [1.0, 0.85, 0.0, 1]; // yellow = playing (unmuted), like Live's track activator
 var COLOR_OFF = [0.17, 0.17, 0.17, 1];
 var TEXT_ON = [0, 0, 0, 1];
 var TEXT_OFF = [0.6, 0.6, 0.6, 1];
@@ -31,19 +31,30 @@ function clean(x) { return String(x).replace(/^[\s"]+|[\s"]+$/g, ""); }
 function at(path) { api.goto(path); return api; }
 function trackPath(t) { return "live_set tracks " + t; }
 function box(name) { return this.patcher.getnamed(name); }
+// The device view's mute buttons live in the parent patcher, because Live can only MIDI-map
+// parameters shown in the device.
+function deviceButton(i) {
+	var parent = this.patcher.parentpatcher;
+	return parent ? parent.getnamed("dmute_" + i) : null;
+}
 
 function setStatus(text) { box("status").message("set", text); }
 
-function paint(name, color, text) {
-	var o = box(name);
+function paint(o, color, text) {
+	if (!o) return;
 	o.message("activebgcolor", color[0], color[1], color[2], color[3]);
 	o.message("activetextcolor", text[0], text[1], text[2], text[3]);
 }
 function paintPlay(i) {
-	paint("play_" + i, COLOR_OFF, strips[i].playing ? ICON_PLAYING : TEXT_OFF);
+	paint(box("play_" + i), COLOR_OFF, strips[i].playing ? ICON_PLAYING : TEXT_OFF);
 }
 function paintMute(i) {
-	paint("mute_" + i, strips[i].muted ? COLOR_MUTED : COLOR_OFF, strips[i].muted ? TEXT_ON : TEXT_OFF);
+	var muted = strips[i].muted;
+	paint(box("mute_" + i), muted ? COLOR_OFF : COLOR_ACTIVE, muted ? TEXT_OFF : TEXT_ON);
+	// The device button is an on/off switch whose value is "group active". "set" changes it
+	// without output, so mirroring Live's state can't send a command back.
+	var dev = deviceButton(i);
+	if (dev) dev.message("set", muted ? 0 : 1);
 }
 
 function unwatch() {
@@ -101,8 +112,14 @@ function build() {
 		var used = s < strips.length;
 		var parts = ["name_", "play_", "stop_", "mute_"];
 		for (var p = 0; p < parts.length; p++) box(parts[p] + s).hidden = used ? 0 : 1;
+		var dev = deviceButton(s);
+		if (dev) dev.hidden = used ? 0 : 1;
 		if (!used) continue;
 		box("name_" + s).message("set", strips[s].name);
+		if (dev) {
+			dev.message("text", strips[s].name);
+			dev.message("texton", strips[s].name);
+		}
 		strips[s].muted = !!first(at(trackPath(strips[s].track)).get("mute"));
 		strips[s].watcher = new LiveAPI(makeMuteCallback(s), trackPath(strips[s].track));
 		strips[s].watcher.property = "mute";
@@ -117,10 +134,10 @@ function build() {
 // Fits the window to the strips in use, keeping any zoom the user has set by resizing.
 // Runs only when the number of strips changes, so a chosen window size otherwise stays.
 function fitWindow() {
+	var win = this.patcher.wind;
+	if (!win || !win.visible) return; // fitted when the window is next opened
 	if (strips.length === fittedCount) return;
 	fittedCount = strips.length;
-	var win = this.patcher.wind;
-	if (!win) return;
 	var columns = Math.max(strips.length, MIN_COLUMNS);
 	var width = 2 * SIDE_MARGIN + columns * STRIP_PITCH - STRIP_GAP;
 	var size = win.size;
@@ -132,8 +149,8 @@ function fitWindow() {
 
 function scene(n) { curScene = n; }
 
-// Sent each time the window is opened, so reopening also picks up renamed tracks.
-function opened() {
+// Sent once the device has loaded, so the device's mute buttons work without the window.
+function init() {
 	if (!api) api = new LiveAPI(function () {}, "live_set");
 	if (!tracksWatcher) {
 		tracksWatcher = new LiveAPI(function () { tracksDirty = true; }, "live_set");
@@ -144,15 +161,25 @@ function opened() {
 	ready = true;
 }
 
+// Sent each time the window is opened, so reopening also picks up renamed tracks.
+function opened() {
+	init();
+	fitWindow();
+}
+
+// Rebuilds if tracks were added, removed or moved, so a button never acts on the wrong track.
+function refresh() {
+	if (!tracksDirty) return;
+	tracksDirty = false;
+	if (String(at("live_set").get("tracks")) !== trackIds) build();
+}
+
 // Checks one strip per call, and only while the window is visible, to keep the load small.
 function poll() {
 	if (!ready) return;
 	var win = this.patcher.wind;
 	if (!win || !win.visible) return;
-	if (tracksDirty) {
-		tracksDirty = false;
-		if (String(at("live_set").get("tracks")) !== trackIds) build();
-	}
+	refresh();
 	if (!strips.length) return;
 	pollIndex = (pollIndex + 1) % strips.length;
 	var s = strips[pollIndex], playing = false;
@@ -168,7 +195,9 @@ function poll() {
 // PLAY launches this group's clips from the current section's scene, through Global
 // Quantization. Empty slots are skipped, so it can't trigger a stop button.
 function play(i) {
-	if (!ready || !strips[i]) return;
+	if (!ready) return;
+	refresh();
+	if (!strips[i]) return;
 	if (!curScene) { setStatus("PLAY: no current section. Launch a scene first"); return; }
 	var fired = 0;
 	for (var k = 0; k < strips[i].kids.length; k++) {
@@ -181,13 +210,27 @@ function play(i) {
 	setStatus(fired ? "" : strips[i].name + " has no clips in this section");
 }
 function stop(i) {
-	if (!ready || !strips[i]) return;
+	if (!ready) return;
+	refresh();
+	if (!strips[i]) return;
 	for (var k = 0; k < strips[i].kids.length; k++) at(trackPath(strips[i].kids[k])).call("stop_all_clips");
 }
 function mute(i) {
-	if (!ready || !strips[i]) return;
+	if (!ready) return;
+	refresh();
+	if (!strips[i]) return;
 	// The display changes when Live's notification confirms the new state.
 	at(trackPath(strips[i].track)).set("mute", strips[i].muted ? 0 : 1);
+}
+// From the device's MIDI-mappable switches: 1 = group playing, 0 = muted. It sets the state
+// rather than flipping it, so a repeated or late message can't invert the mute.
+function active(i, on) {
+	if (!ready) return;
+	refresh();
+	if (!strips[i]) return;
+	var mute = on ? 0 : 1;
+	if (mute === (strips[i].muted ? 1 : 0)) return;
+	at(trackPath(strips[i].track)).set("mute", mute);
 }
 function notifydeleted() {
 	ready = false;

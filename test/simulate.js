@@ -357,6 +357,8 @@ test('Title: never part of the song, so PREV from Intro is still refused', () =>
 function makeMixer(tracks, opts = {}) {
   const log = [], objs = {}, posts = [];
   const obj = n => objs[n] || (objs[n] = { hidden: 0, msgs: {}, message(m, ...a) { this.msgs[m] = a; } });
+  const devObjs = {};
+  const devObj = n => devObjs[n] || (devObjs[n] = { hidden: 0, msgs: {}, message(m, ...a) { this.msgs[m] = a; } });
   const watchers = [];
   const ok = /^live_set tracks (\d+)$/, slot = /^live_set tracks (\d+) clip_slots (\d+)$/;
   class LiveAPI {
@@ -382,19 +384,19 @@ function makeMixer(tracks, opts = {}) {
     call(f) { log.push([f, this.path]); }
   }
   const sent = [];
-  const ctx = vm.createContext({ LiveAPI, Math, String, post: s => posts.push(s), outlet: (...a) => sent.push(a), patcher: { getnamed: obj, wind: { visible: opts.visible !== false, size: [1120, 280] } } });
+  const ctx = vm.createContext({ LiveAPI, Math, String, post: s => posts.push(s), outlet: (...a) => sent.push(a), patcher: { getnamed: obj, parentpatcher: { getnamed: devObj }, wind: { visible: opts.visible !== false, size: [1120, 280] } } });
   vm.runInContext(fs.readFileSync(path.join(__dirname, '../device/mixer.js'), 'utf8'), ctx);
-  return { ctx, log, obj, posts, tracks, watchers, sent };
+  return { ctx, log, obj, devObj, posts, tracks, watchers, sent };
 }
 const SET = () => [{ name: 'DRUMS', group: 1 }, { name: 'KICK', parent: 0, clips: [3, 7] }, { name: 'SNARE', parent: 0, clips: [7] },
   { name: 'BASS', group: 1, mute: 1 }, { name: 'SUB', parent: 3, clips: [3] }, { name: 'LOOSE', clips: [3] }, { name: 'SONG-JAM' }];
-const AMBER = '1,0.69,0,1', OFFC = '0.17,0.17,0.17,1';
+const YELLOW = '1,0.85,0,1', OFFC = '0.17,0.17,0.17,1';
 test('Mixer: makes strips from group tracks only, and hides spares', () => {
   const M = makeMixer(SET()); M.ctx.opened();
   assert.deepStrictEqual(M.obj('name_0').msgs.set, ['DRUMS']); assert.deepStrictEqual(M.obj('name_1').msgs.set, ['BASS']);
   assert.strictEqual(M.obj('play_1').hidden, 0); assert.strictEqual(M.obj('play_2').hidden, 1);
 });
-test('Mixer: does nothing to Live before the window is opened', () => {
+test('Mixer: does nothing to Live before the device has loaded', () => {
   const M = makeMixer(SET()); M.ctx.scene(4); M.ctx.play(0); M.ctx.stop(0); M.ctx.mute(0); M.ctx.poll();
   assert.deepStrictEqual(M.log, []); assert.strictEqual(M.watchers.length, 0);
 });
@@ -410,11 +412,11 @@ test('Mixer: STOP stops each track in the group and no others', () => {
   const M = makeMixer(SET()); M.ctx.opened(); M.ctx.stop(0);
   assert.deepStrictEqual(M.log, [['stop_all_clips', 'live_set tracks 1'], ['stop_all_clips', 'live_set tracks 2']]);
 });
-test('Mixer: M toggles the group track, and the lamp follows Live', () => {
+test('Mixer: M toggles the group track, and the lamp follows Live: yellow playing, grey muted', () => {
   const M = makeMixer(SET()); M.ctx.opened();
-  assert.strictEqual(M.obj('mute_1').msgs.activebgcolor.join(), AMBER); assert.strictEqual(M.obj('mute_0').msgs.activebgcolor.join(), OFFC);
-  M.ctx.mute(0); assert.deepStrictEqual(M.log, [['mute', 0, 1]]); assert.strictEqual(M.obj('mute_0').msgs.activebgcolor.join(), AMBER);
-  M.ctx.mute(0); assert.strictEqual(M.obj('mute_0').msgs.activebgcolor.join(), OFFC);
+  assert.strictEqual(M.obj('mute_1').msgs.activebgcolor.join(), OFFC); assert.strictEqual(M.obj('mute_0').msgs.activebgcolor.join(), YELLOW);
+  M.ctx.mute(0); assert.deepStrictEqual(M.log, [['mute', 0, 1]]); assert.strictEqual(M.obj('mute_0').msgs.activebgcolor.join(), OFFC);
+  M.ctx.mute(0); assert.strictEqual(M.obj('mute_0').msgs.activebgcolor.join(), YELLOW);
 });
 test('Mixer: PLAY lamp follows playing tracks, and polling stops when the window is closed', () => {
   const M = makeMixer(SET()); M.ctx.opened(); M.tracks[2].playing = 1;
@@ -458,4 +460,35 @@ test('Mixer window: stays wide enough for its status text with few groups', () =
 test('Window scaling: a new design width fills the window without stretching', () => {
   const W = makeWindow([850, 505]); W.ctx.design(850); W.ctx.poll();
   assert.deepStrictEqual(W.objs.jam.rect, [365, 20, 335, 110]); assert.strictEqual(W.objs.jam.font, 44);
+});
+test('Device mutes: named after the groups, spares hidden, and they work without opening the window', () => {
+  const M = makeMixer(SET(), { visible: false }); M.ctx.init();
+  assert.deepStrictEqual(M.devObj('dmute_0').msgs.text, ['DRUMS']); assert.strictEqual(M.devObj('dmute_2').hidden, 1);
+  assert.deepStrictEqual(M.devObj('dmute_1').msgs.set, [0]); assert.deepStrictEqual(M.devObj('dmute_0').msgs.set, [1]);
+  M.ctx.active(0, 0); assert.deepStrictEqual(M.log, [['mute', 0, 1]]);
+  assert.deepStrictEqual(M.devObj('dmute_0').msgs.set, [0]); assert.strictEqual(M.obj('mute_0').msgs.activebgcolor.join(), OFFC);
+});
+test('Device mutes: the window is not resized while closed, then fits when opened', () => {
+  const M = makeMixer(GROUPS(9), { visible: false }); M.ctx.init();
+  assert.deepStrictEqual(Array.from(M.ctx.patcher.wind.size), [1120, 280]);
+  M.ctx.patcher.wind.visible = true; M.ctx.opened(); assert.deepStrictEqual(Array.from(M.ctx.patcher.wind.size), [850, 280]);
+});
+test('Device mutes: after tracks move, a press acts on the right group track', () => {
+  const tracks = SET(); const M = makeMixer(tracks, { visible: false }); M.ctx.init();
+  tracks.unshift({ name: 'NEW', id: 999 }); tracks.forEach(t => { if (t.parent !== undefined) t.parent += 1; });
+  M.watchers.filter(w => w._p === 'tracks').forEach(w => w.cb(['tracks']));
+  M.ctx.active(0, 0); assert.deepStrictEqual(M.log, [['mute', 1, 1]]);
+});
+test('Device switches: set the state rather than flip it, so repeats are harmless', () => {
+  const M = makeMixer(SET(), { visible: false }); M.ctx.init();
+  M.ctx.active(0, 1); M.ctx.active(1, 0); assert.deepStrictEqual(M.log, [], 'already in that state');
+  M.ctx.active(1, 1); M.ctx.active(1, 1); assert.deepStrictEqual(M.log, [['mute', 3, 0]]);
+});
+test('Device switches: the window M and the device switch stay in sync both ways', () => {
+  const M = makeMixer(SET()); M.ctx.opened();
+  M.ctx.mute(0); assert.deepStrictEqual(M.devObj('dmute_0').msgs.set, [0]);
+  M.ctx.active(0, 1); assert.strictEqual(M.obj('mute_0').msgs.activebgcolor.join(), YELLOW);
+});
+test('Device switches: ignored before the device has loaded, e.g. Live restoring saved values', () => {
+  const M = makeMixer(SET()); M.ctx.active(0, 0); assert.deepStrictEqual(M.log, []);
 });

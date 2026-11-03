@@ -62,14 +62,15 @@ Name any scene `SONG: <title>`, and the device and large window show the title. 
 - **Resizing:** drag the window's edge and the contents scale to fit, including text size. Live fixes the device strip's height, so only the large window resizes.
 
 ## Mixer
-**MIXER** on the device opens a window with one strip per top-level group track, up to 12. The strips come from the running set through the Live API, so there's nothing to configure. `mixer.js` is separate from the router and receives only the current scene number. It makes no Live API calls until the window is first opened.
+**MIXER** on the device opens a window with one strip per top-level group track, up to 12. The strips come from the running set through the Live API, so there's nothing to configure. `mixer.js` is separate from the router and receives only the current scene number. It reads the groups once when the device loads, so the mute buttons work without opening the window.
 
 | Button | What it does |
 |---|---|
 | **PLAY** (triangle) | Launches the group's clips from the current section's scene, at the next bar line. Empty slots are skipped. Green while the group is playing |
 | **STOP** (square) | Stops the clips on every track in the group |
-| **M** | Mutes the group track. Amber while muted |
+| **M** | Mutes the group track. Yellow while playing, grey while muted |
 
+- **MIDI mapping mutes:** the device view has an on/off switch per group, named after it, beside the main controls. Map these with Cmd+M, because Live can't map controls in a separate window. Yellow means the group is playing and grey means muted, like Live's track activators. One press of a note or button flips it, and the switches stay in sync with the window's M buttons and work with the window closed. Each mapping follows a strip position, not a group, so if you add, remove or reorder groups, check your mappings.
 - **Window:** it sizes itself to the number of groups, and scales when you resize it. A size you've chosen stays until the number of groups changes. Reopening it refreshes track names.
 - **Mid-section changes:** use M. PLAY starts clips from their beginning, so a group started mid-section can be out of phase until the next scene launch.
 - **STOP is temporary:** the next scene launch brings the group's clips back. The docs don't say whether STOP waits for Global Quantization, so it may cut immediately.

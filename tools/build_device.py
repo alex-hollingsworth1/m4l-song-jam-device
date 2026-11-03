@@ -3,7 +3,8 @@
 import json, struct, pathlib
 
 OUT = pathlib.Path(__file__).resolve().parent.parent / "device" / "SongJamRouter.amxd"
-WIDTH = 300
+WIDTH = 300  # main section; the device is wider, to fit the mute buttons
+DEVICE_WIDTH = 436
 FONT = "Ableton Sans Medium Regular"  # the font in Ableton's own device template
 boxes, lines = [], []
 
@@ -42,20 +43,31 @@ def wire(src, dst, src_out=0, dst_in=0):
     )
 
 
-def button(box_id, label, longname, short, rect, patch_x, fontsize=10.0):
+def button(
+    box_id,
+    label,
+    longname,
+    short,
+    rect,
+    patch_x,
+    fontsize=10.0,
+    varname=None,
+    mode=0,
+    **extra,
+):
     add(
         box_id,
         maxclass="live.text",
         text=label,
         texton=label,
-        mode=0,
+        mode=mode,
         numinlets=1,
         numoutlets=2,
         outlettype=["", ""],
         parameter_enable=1,
         fontname=FONT,
         fontsize=fontsize,
-        varname=short.lower(),
+        varname=varname or short.lower(),
         patching_rect=[patch_x, 300, 60, 20],
         presentation=1,
         presentation_rect=rect,
@@ -68,6 +80,7 @@ def button(box_id, label, longname, short, rect, patch_x, fontsize=10.0):
                 "parameter_type": 2,
             }
         },
+        **extra,
     )
 
 
@@ -91,15 +104,42 @@ WHITE, GREY = [1.0, 1.0, 1.0, 1.0], [0.6, 0.6, 0.6, 1.0]
 
 
 def text(box_id, value, rect, y, size, color, **extra):
-    add(box_id, maxclass="comment", text=value, numinlets=1, numoutlets=0, fontname=FONT, fontsize=size,
-        textcolor=color, varname=box_id, patching_rect=[800, y, 200, 20],
-        presentation=1, presentation_rect=rect, **extra)
+    add(
+        box_id,
+        maxclass="comment",
+        text=value,
+        numinlets=1,
+        numoutlets=0,
+        fontname=FONT,
+        fontsize=size,
+        textcolor=color,
+        varname=box_id,
+        patching_rect=[800, y, 200, 20],
+        presentation=1,
+        presentation_rect=rect,
+        **extra,
+    )
 
 
 def big_button(box_id, value, rect, x, size, m, patch_y=300, **extra):
-    add(box_id, maxclass="live.text", text=value, texton=value, mode=0, numinlets=1, numoutlets=2,
-        outlettype=["", ""], parameter_enable=0, fontname=FONT, fontsize=size, varname=box_id,
-        patching_rect=[x, patch_y, 80, 20], presentation=1, presentation_rect=rect, **extra)
+    add(
+        box_id,
+        maxclass="live.text",
+        text=value,
+        texton=value,
+        mode=0,
+        numinlets=1,
+        numoutlets=2,
+        outlettype=["", ""],
+        parameter_enable=0,
+        fontname=FONT,
+        fontsize=size,
+        varname=box_id,
+        patching_rect=[x, patch_y, 80, 20],
+        presentation=1,
+        presentation_rect=rect,
+        **extra,
+    )
     msg("m_" + box_id, m, x, patch_y + 40)
     wire(box_id, "m_" + box_id)
     wire("m_" + box_id, "out")
@@ -107,19 +147,34 @@ def big_button(box_id, value, rect, x, size, m, patch_y=300, **extra):
 
 def icon(svg):
     """live.text attributes that draw an SVG in the button's text colour."""
-    return {"usepicture": 1, "pictures": [svg, svg], "remapsvgcolors": 1,
-            "usesvgviewbox": 1, "activetextcolor": GREY, "activetextoncolor": WHITE}
+    return {
+        "usepicture": 1,
+        "pictures": [svg, svg],
+        "remapsvgcolors": 1,
+        "usesvgviewbox": 1,
+        "activetextcolor": GREY,
+        "activetextoncolor": WHITE,
+    }
 
 
 def window_patcher(width, height, x=200.0, y=120.0):
     return {
         "fileversion": 1,
-        "appversion": {"major": 9, "minor": 1, "revision": 5, "architecture": "x64", "modernui": 1},
+        "appversion": {
+            "major": 9,
+            "minor": 1,
+            "revision": 5,
+            "architecture": "x64",
+            "modernui": 1,
+        },
         "classnamespace": "box",
         "rect": [x, y, float(width), float(height)],
         "openinpresentation": 1,
-        "bgcolor": WINDOW_BG, "editing_bgcolor": WINDOW_BG, "locked_bgcolor": WINDOW_BG,
-        "toolbarvisible": 0, "statusbarvisible": 0,
+        "bgcolor": WINDOW_BG,
+        "editing_bgcolor": WINDOW_BG,
+        "locked_bgcolor": WINDOW_BG,
+        "toolbarvisible": 0,
+        "statusbarvisible": 0,
         "default_fontsize": 12.0,
         "default_fontname": FONT,
         "boxes": boxes,
@@ -147,10 +202,45 @@ def mixer_view():
     outer_boxes, outer_lines = boxes, lines
     boxes, lines = [], []
     width, height, strip_w = 1120, 280, 90
-    add("in_pc", maxclass="inlet", numinlets=0, numoutlets=1, outlettype=[""], patching_rect=[10, 10, 30, 30])
-    add("in_cfg", maxclass="inlet", numinlets=0, numoutlets=1, outlettype=[""], patching_rect=[60, 10, 30, 30])
-    add("in_scene", maxclass="inlet", numinlets=0, numoutlets=1, outlettype=[""], patching_rect=[110, 10, 30, 30])
-    add("out", maxclass="outlet", numinlets=1, numoutlets=0, patching_rect=[10, 240, 30, 30])
+    add(
+        "in_pc",
+        maxclass="inlet",
+        numinlets=0,
+        numoutlets=1,
+        outlettype=[""],
+        patching_rect=[10, 10, 30, 30],
+    )
+    add(
+        "in_cfg",
+        maxclass="inlet",
+        numinlets=0,
+        numoutlets=1,
+        outlettype=[""],
+        patching_rect=[60, 10, 30, 30],
+    )
+    add(
+        "in_scene",
+        maxclass="inlet",
+        numinlets=0,
+        numoutlets=1,
+        outlettype=[""],
+        patching_rect=[110, 10, 30, 30],
+    )
+    add(
+        "in_cmd",
+        maxclass="inlet",
+        numinlets=0,
+        numoutlets=1,
+        outlettype=[""],
+        patching_rect=[160, 10, 30, 30],
+    )
+    add(
+        "out",
+        maxclass="outlet",
+        numinlets=1,
+        numoutlets=0,
+        patching_rect=[10, 240, 30, 30],
+    )
     msg("m_cfg", 'presentation 1, topmost 1, title "Song Jam Mixer"', 60, 60)
     obj("thispatcher", "thispatcher", 1, 2, 60, 95, ["", ""])
     wire("in_cfg", "m_cfg")
@@ -170,15 +260,50 @@ def mixer_view():
     wire("mix_defer", "m_mix_poll")
     wire("m_mix_poll", "mix_js")
     wire("in_scene", "mix_js")
+    wire("in_cmd", "mix_js")
     # Tells the scaling script the layout width, once scaling() below has created it.
 
     names = ["status"]
     for i in range(12):
         x = 10 + i * (strip_w + 2.5)
-        text(f"name_{i}", "--", [x, 10, strip_w, 40], 300 + i * 25, 12.0, WHITE, textjustification=1)
-        big_button(f"play_{i}", "PLAY", [x, 54, strip_w, 58], 600 + i * 100, 14.0, f"play {i}", 300, **icon("icon_play.svg"))
-        big_button(f"stop_{i}", "STOP", [x, 118, strip_w, 58], 600 + i * 100, 14.0, f"stop {i}", 400, **icon("icon_stop.svg"))
-        big_button(f"mute_{i}", "M", [x, 182, strip_w, 58], 600 + i * 100, 18.0, f"mute {i}", 500)
+        text(
+            f"name_{i}",
+            "--",
+            [x, 10, strip_w, 40],
+            300 + i * 25,
+            12.0,
+            WHITE,
+            textjustification=1,
+        )
+        big_button(
+            f"play_{i}",
+            "PLAY",
+            [x, 54, strip_w, 58],
+            600 + i * 100,
+            14.0,
+            f"play {i}",
+            300,
+            **icon("icon_play.svg"),
+        )
+        big_button(
+            f"stop_{i}",
+            "STOP",
+            [x, 118, strip_w, 58],
+            600 + i * 100,
+            14.0,
+            f"stop {i}",
+            400,
+            **icon("icon_stop.svg"),
+        )
+        big_button(
+            f"mute_{i}",
+            "M",
+            [x, 182, strip_w, 58],
+            600 + i * 100,
+            18.0,
+            f"mute {i}",
+            500,
+        )
         names += [f"name_{i}", f"play_{i}", f"stop_{i}", f"mute_{i}"]
     text("status", "", [10, 246, 420, 26], 280, 13.0, GREY)
     scaling(width, height, names, 400)
@@ -187,7 +312,11 @@ def mixer_view():
     # Buttons reach the script directly rather than through the patcher's outlet.
     lines[:] = [l for l in lines if l["patchline"]["destination"][0] != "out"]
     for b in boxes:
-        if b["box"]["id"].startswith("m_") and b["box"]["id"][2:7] in ("play_", "stop_", "mute_"):
+        if b["box"]["id"].startswith("m_") and b["box"]["id"][2:7] in (
+            "play_",
+            "stop_",
+            "mute_",
+        ):
             wire(b["box"]["id"], "mix_js")
 
     sub = window_patcher(width, height, 120.0, 420.0)
@@ -202,19 +331,63 @@ def big_view():
     boxes, lines = [], []
 
     # Inlet order follows x position. Inlet 0 belongs to pcontrol, inlet 1 configures the window.
-    add("in_pc", maxclass="inlet", numinlets=0, numoutlets=1, outlettype=[""], patching_rect=[10, 10, 30, 30])
-    add("in_cfg", maxclass="inlet", numinlets=0, numoutlets=1, outlettype=[""], patching_rect=[60, 10, 30, 30])
+    add(
+        "in_pc",
+        maxclass="inlet",
+        numinlets=0,
+        numoutlets=1,
+        outlettype=[""],
+        patching_rect=[10, 10, 30, 30],
+    )
+    add(
+        "in_cfg",
+        maxclass="inlet",
+        numinlets=0,
+        numoutlets=1,
+        outlettype=[""],
+        patching_rect=[60, 10, 30, 30],
+    )
     for i in range(7):
-        add(f"in_{i}", maxclass="inlet", numinlets=0, numoutlets=1, outlettype=[""],
-            patching_rect=[110 + i * 50, 10, 30, 30])
-    add("out", maxclass="outlet", numinlets=1, numoutlets=0, patching_rect=[10, 400, 30, 30])
+        add(
+            f"in_{i}",
+            maxclass="inlet",
+            numinlets=0,
+            numoutlets=1,
+            outlettype=[""],
+            patching_rect=[110 + i * 50, 10, 30, 30],
+        )
+    add(
+        "out",
+        maxclass="outlet",
+        numinlets=1,
+        numoutlets=0,
+        patching_rect=[10, 400, 30, 30],
+    )
     msg("m_cfg", 'presentation 1, topmost 1, title "Song Jam Router"', 60, 60)
     obj("thispatcher", "thispatcher", 1, 2, 60, 95, ["", ""])
     wire("in_cfg", "m_cfg")
     wire("m_cfg", "thispatcher")
 
-    scaling(720, 505, ["title", "song", "jam", "cancel", "prev", "next", "cap_0", "val_0",
-                       "cap_2", "val_2", "cap_3", "val_3", "val_4"], 400)
+    scaling(
+        720,
+        505,
+        [
+            "title",
+            "song",
+            "jam",
+            "cancel",
+            "prev",
+            "next",
+            "cap_0",
+            "val_0",
+            "cap_2",
+            "val_2",
+            "cap_3",
+            "val_3",
+            "val_4",
+        ],
+        400,
+    )
 
     big_button("song", "SONG", [20, 80, 335, 110], 10, 44.0, "reqsong")
     big_button("jam", "JAM", [365, 80, 335, 110], 100, 44.0, "reqjam")
@@ -226,9 +399,16 @@ def big_view():
     wire("route", "song", 0)
     wire("route", "jam", 1)
 
-    rows = [("Section", 205, 46, 60, 0), ("Mode", 0, 0, 0, 1), ("Next", 275, 26, 40, 2), ("Bars left", 325, 46, 60, 3)]
+    rows = [
+        ("Section", 205, 46, 60, 0),
+        ("Mode", 0, 0, 0, 1),
+        ("Next", 275, 26, 40, 2),
+        ("Bars left", 325, 46, 60, 3),
+    ]
     for cap, y, size, h, i in rows:
-        if cap == "Mode":   # already shown by the lit lamp; kept wired so all outlets are handled
+        if (
+            cap == "Mode"
+        ):  # already shown by the lit lamp; kept wired so all outlets are handled
             continue
         text(f"cap_{i}", cap, [20, y + 8, 110, 24], 40 + i * 25, 16.0, GREY)
         text(f"val_{i}", "--", [130, y, 570, h], 52 + i * 25, size, WHITE)
@@ -276,8 +456,15 @@ button("b_cancel", "CANCEL", "Cancel Pending", "Cancel", [6, 60, 96, 18], 260)
 button("b_prev", "PREV", "Manual Previous", "Prev", [6, 81, 46, 18], 660)
 button("b_next", "NEXT", "Manual Next", "Next", [56, 81, 46, 18], 340)
 button("b_rescan", "RESCAN", "Rescan Set", "Rescan", [6, 129, 96, 18], 420)
-for b, m, x in [("b_song", "reqsong", 20), ("b_jam", "reqjam", 100), ("b_toggle", "toggle", 180),
-                ("b_cancel", "cancel", 260), ("b_next", "next", 340), ("b_prev", "prev", 660), ("b_rescan", "rescan", 420)]:
+for b, m, x in [
+    ("b_song", "reqsong", 20),
+    ("b_jam", "reqjam", 100),
+    ("b_toggle", "toggle", 180),
+    ("b_cancel", "cancel", 260),
+    ("b_next", "next", 340),
+    ("b_prev", "prev", 660),
+    ("b_rescan", "rescan", 420),
+]:
     msg("m_" + m, m, x, 340)
     wire(b, "m_" + m)
     wire("m_" + m, "js")
@@ -288,7 +475,12 @@ wire("js", "route", 5)
 wire("route", "b_song", 0)
 wire("route", "b_jam", 1)
 
-rows = [("Section", 22, 12.0), ("Mode", 40, 10.0), ("Next", 56, 10.0), ("Bars", 72, 10.0)]
+rows = [
+    ("Section", 22, 12.0),
+    ("Mode", 40, 10.0),
+    ("Next", 56, 10.0),
+    ("Bars", 72, 10.0),
+]
 for i, (name, y, size) in enumerate(rows):
     label("cap_" + name, name, [108, y, 44, 18], 20 + i * 25)
     label("val_" + name, "--", [150, y, WIDTH - 154, 18], 20 + i * 25 + 12, size)
@@ -302,14 +494,24 @@ wire("js", "val_title", 6)
 # needs no extra files. Its buttons have parameter_enable 0, so the mappable controls stay
 # the ones in the device view.
 button("b_window", "OPEN WINDOW", "Open Window", "Window", [6, 104, 96, 22], 500)
-add("big", maxclass="newobj", text="p BigView", numinlets=9, numoutlets=1, outlettype=[""],
-    patching_rect=[20, 400, 300, 22], patcher=big_view())
+add(
+    "big",
+    maxclass="newobj",
+    text="p BigView",
+    numinlets=9,
+    numoutlets=1,
+    outlettype=[""],
+    patching_rect=[20, 400, 300, 22],
+    patcher=big_view(),
+)
 msg("m_open", "open", 500, 340)
 obj("pcontrol", "pcontrol", 1, 1, 500, 370)
 obj("t_open", "t b b", 1, 2, 590, 340, ["bang", "bang"])
 obj("defer_open", "deferlow", 1, 1, 590, 370)
 wire("b_window", "t_open")
-wire("t_open", "defer_open", 0)     # right outlet fires first: open, then configure the window
+wire(
+    "t_open", "defer_open", 0
+)  # right outlet fires first: open, then configure the window
 wire("t_open", "m_open", 1)
 wire("m_open", "pcontrol")
 wire("pcontrol", "big")
@@ -320,8 +522,16 @@ wire("big", "js")
 
 # Mixer window, opened the same way. It stays idle until first opened.
 button("b_mixer", "MIXER", "Open Mixer", "Mixer", [6, 149, 96, 18], 740)
-add("mixer", maxclass="newobj", text="p Mixer", numinlets=3, numoutlets=1, outlettype=[""],
-    patching_rect=[340, 400, 300, 22], patcher=mixer_view())
+add(
+    "mixer",
+    maxclass="newobj",
+    text="p Mixer",
+    numinlets=4,
+    numoutlets=1,
+    outlettype=[""],
+    patching_rect=[340, 400, 300, 22],
+    patcher=mixer_view(),
+)
 msg("m_mix_open", "open", 740, 340)
 obj("mix_pcontrol", "pcontrol", 1, 1, 740, 370)
 obj("t_mix", "t b b", 1, 2, 830, 340, ["bang", "bang"])
@@ -334,6 +544,49 @@ wire("mix_pcontrol", "mixer")
 wire("defer_mix", "mixer", 0, 1)
 wire("js", "mixer", 7, 2)
 
+# MIDI-mappable on/off switches, one per mixer strip: on (yellow) = group playing, off (grey)
+# = muted. Live can only map parameters in the device view, and maps notes and buttons onto
+# on/off switches natively, so one press is one change. mixer.js names them after the groups,
+# hides spares and mirrors Live's mute state. Commands reach it via deferlow, so a
+# MIDI-mapped press is never treated as a notification.
+YELLOW, OFF_GREY, LIGHT_GREY = (
+    [1.0, 0.85, 0.0, 1.0],
+    [0.3, 0.3, 0.3, 1.0],
+    [0.75, 0.75, 0.75, 1.0],
+)
+SWITCH_COLORS = {
+    "activebgoncolor": YELLOW,
+    "bgoncolor": YELLOW,
+    "activetextoncolor": [0.0, 0.0, 0.0, 1.0],
+    "textcolor": [0.0, 0.0, 0.0, 1.0],
+    "activebgcolor": OFF_GREY,
+    "bgcolor": OFF_GREY,
+    "activetextcolor": LIGHT_GREY,
+    "textoffcolor": LIGHT_GREY,
+}
+obj("mix_cmd_defer", "deferlow", 1, 1, 900, 400)
+wire("mix_cmd_defer", "mixer", 0, 3)
+msg("m_mix_init", "init", 900, 340)
+wire("thisdevice", "m_mix_init")
+wire("m_mix_init", "mix_cmd_defer")
+for i in range(12):
+    col, row = i % 2, i // 2
+    button(
+        f"b_dmute_{i}",
+        "--",
+        f"Group {i + 1} Active",
+        f"Group {i + 1}",
+        [WIDTH + 4 + col * 66, 4 + row * 27, 62, 24],
+        900 + i * 70,
+        9.0,
+        varname=f"dmute_{i}",
+        mode=1,
+        **SWITCH_COLORS,
+    )
+    msg(f"m_dmute_{i}", f"active {i} $1", 900 + i * 70, 340)
+    wire(f"b_dmute_{i}", f"m_dmute_{i}")
+    wire(f"m_dmute_{i}", "mix_cmd_defer")
+
 patcher = {
     "fileversion": 1,
     "appversion": {
@@ -345,11 +598,11 @@ patcher = {
     },
     "classnamespace": "box",
     "rect": [100.0, 100.0, 760.0, 480.0],
-    "openrect": [0.0, 0.0, float(WIDTH), 169.0],
+    "openrect": [0.0, 0.0, float(DEVICE_WIDTH), 169.0],
     "openinpresentation": 1,
     "default_fontsize": 10.0,
     "default_fontname": FONT,
-    "devicewidth": float(WIDTH),
+    "devicewidth": float(DEVICE_WIDTH),
     "title": "Song Jam Router",
     # Same structure as Ableton's Max MIDI Effect template. Max's freeze and project code
     # expects it, and fails with "a project without a name..." if it's missing.
