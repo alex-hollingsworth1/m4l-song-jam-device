@@ -27,7 +27,7 @@ def obj(box_id, text, inlets, outlets, x, y, outlettype=None):
 
 def sel1(box_id, x, y):
     """Filters button output to pass only press (1), not release (0)."""
-    obj(box_id, "sel 1", 1, 1, x, y, ["bang"])
+    obj(box_id, "sel 1", 1, 2, x, y, ["bang", ""])
 
 
 def msg(box_id, text, x, y):
@@ -145,8 +145,8 @@ def big_button(box_id, value, rect, x, size, m, patch_y=300, **extra):
         presentation_rect=rect,
         **extra,
     )
-    sel1("sel_" + box_id, x, patch_y + 25)
-    msg("m_" + box_id, m, x, patch_y + 40)
+    sel1("sel_" + box_id, x, patch_y + 30)
+    msg("m_" + box_id, m, x, patch_y + 55)
     wire(box_id, "sel_" + box_id)
     wire("sel_" + box_id, "m_" + box_id)
     wire("m_" + box_id, "out")
@@ -255,12 +255,20 @@ def mixer_view():
 
     obj("mix_js", "js mixer.js", 1, 1, 210, 190)
     msg("m_opened", "opened", 210, 60)
-    # Deferred tick for parameter updates, runs even when window is closed
-    msg("m_tick_on", "1", 380, 60)
-    obj("tick_metro", "metro 50", 2, 1, 380, 95, ["bang"])
-    obj("tick_defer", "deferlow", 1, 1, 380, 125)
-    msg("m_tick", "tick", 380, 155)
-    wire("in_cfg", "m_tick_on")
+    # Deferred tick for parameter updates, runs from load, even when window is closed
+    add(
+        "tick_load",
+        maxclass="loadbang",
+        numinlets=1,
+        numoutlets=1,
+        outlettype=["bang"],
+        patching_rect=[380, 60, 60, 22],
+    )
+    msg("m_tick_on", "1", 380, 85)
+    obj("tick_metro", "metro 50", 2, 1, 380, 110, ["bang"])
+    obj("tick_defer", "deferlow", 1, 1, 380, 140)
+    msg("m_tick", "tick", 380, 170)
+    wire("tick_load", "m_tick_on")
     wire("m_tick_on", "tick_metro")
     wire("tick_metro", "tick_defer")
     wire("tick_defer", "m_tick")

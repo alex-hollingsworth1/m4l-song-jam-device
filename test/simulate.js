@@ -553,3 +553,31 @@ test('Patcher: group on/off switches (dmute_N) are mode 1 and not gated', () => 
     assert.ok(!hasSel1, 'dmute_' + i + ' must NOT feed sel 1 (toggles need both values)');
   }
 });
+test('Patcher: mixer PLAY, STOP, M buttons are gated by sel 1', () => {
+  const P = loadPatcher();
+  const mixer = boxById(P, 'mixer');
+  const mixP = mixer.patcher;
+  for (let i = 0; i < 12; i++) {
+    for (const btn of ['play_' + i, 'stop_' + i, 'mute_' + i]) {
+      const wires = wiresBySource(mixP, btn);
+      if (!wires.length) continue; // hidden strip
+      const targets = wires.map(w => boxById(mixP, w.patchline.destination[0]));
+      const hasSel1 = targets.some(t => t && t.text && t.text.startsWith('sel 1'));
+      assert.ok(hasSel1, 'mixer ' + btn + ' must feed a sel 1 object');
+    }
+  }
+});
+test('Patcher: mixer tick runs from loadbang, not from window open', () => {
+  const P = loadPatcher();
+  const mixer = boxById(P, 'mixer');
+  const mixP = mixer.patcher;
+  const tickLoad = boxById(mixP, 'tick_load');
+  assert.ok(tickLoad, 'mixer must have tick_load loadbang');
+  assert.strictEqual(tickLoad.maxclass, 'loadbang', 'tick_load must be a loadbang');
+  const tickMetro = boxById(mixP, 'tick_metro');
+  assert.ok(tickMetro, 'mixer must have tick_metro');
+  assert.ok(tickMetro.text.includes('metro'), 'tick_metro must be a metro');
+  // Verify tick_load -> m_tick_on -> tick_metro -> tick_defer -> m_tick -> mix_js
+  const loadWires = wiresBySource(mixP, 'tick_load');
+  assert.ok(loadWires.some(w => boxById(mixP, w.patchline.destination[0])?.id === 'm_tick_on'), 'tick_load must wire to m_tick_on');
+});
