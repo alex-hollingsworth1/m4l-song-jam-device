@@ -182,10 +182,8 @@ function refresh() {
 // Runs in a deferred context, even when the window is closed, to apply pending parameter updates.
 function tick() {
 	if (!ready) return;
-	var anyDirty = false;
 	for (var i = 0; i < strips.length; i++) {
 		if (strips[i].muteDirty) {
-			anyDirty = true;
 			strips[i].muteDirty = false;
 			var dev = deviceButton(i);
 			if (dev) dev.message("set", strips[i].muted ? 0 : 1);

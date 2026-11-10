@@ -519,27 +519,31 @@ function boxById(patcher, id) {
 function wiresBySource(patcher, srcId) {
   return patcher.lines.filter(l => l.patchline.source[0] === srcId);
 }
-test('Patcher: each command button is gated by sel 1', () => {
+test('Patcher: each command button wires directly to its message', () => {
   const P = loadPatcher();
-  const buttons = ['b_song', 'b_jam', 'b_toggle', 'b_cancel', 'b_next', 'b_prev', 'b_rescan', 'b_window', 'b_mixer'];
-  for (const btn of buttons) {
+  const buttons = [
+    ['b_song', 'm_reqsong'], ['b_jam', 'm_reqjam'], ['b_toggle', 'm_toggle'],
+    ['b_cancel', 'm_cancel'], ['b_next', 'm_next'], ['b_prev', 'm_prev'], ['b_rescan', 'm_rescan']
+  ];
+  for (const [btn, msg] of buttons) {
     const wires = wiresBySource(P, btn);
     assert.ok(wires.length > 0, btn + ' must have outgoing wires');
     const targets = wires.map(w => boxById(P, w.patchline.destination[0]));
-    const hasSel1 = targets.some(t => t && t.text && t.text.startsWith('sel 1'));
-    assert.ok(hasSel1, btn + ' must feed a sel 1 object');
+    const hasMessage = targets.some(t => t && t.id === msg);
+    assert.ok(hasMessage, btn + ' must wire directly to ' + msg + ' (live.text mode 0 outputs bang, not 1/0)');
   }
 });
-test('Patcher: big window buttons are gated by sel 1', () => {
+test('Patcher: window buttons wire to trigger or message', () => {
   const P = loadPatcher();
   const big = boxById(P, 'big');
   const bigP = big.patcher;
-  const buttons = ['song', 'jam', 'cancel', 'prev', 'next'];
-  for (const btn of buttons) {
+  const buttons = [['song', 'm_song'], ['jam', 'm_jam'], ['cancel', 'm_cancel'], ['prev', 'm_prev'], ['next', 'm_next']];
+  for (const [btn, msg] of buttons) {
     const wires = wiresBySource(bigP, btn);
+    assert.ok(wires.length > 0, 'big window ' + btn + ' must have outgoing wires');
     const targets = wires.map(w => boxById(bigP, w.patchline.destination[0]));
-    const hasSel1 = targets.some(t => t && t.text && t.text.startsWith('sel 1'));
-    assert.ok(hasSel1, 'big window ' + btn + ' must feed a sel 1 object');
+    const hasMessage = targets.some(t => t && t.id === msg);
+    assert.ok(hasMessage, 'big window ' + btn + ' must wire to ' + msg);
   }
 });
 test('Patcher: group on/off switches (dmute_N) are mode 1 and not gated', () => {
@@ -553,17 +557,17 @@ test('Patcher: group on/off switches (dmute_N) are mode 1 and not gated', () => 
     assert.ok(!hasSel1, 'dmute_' + i + ' must NOT feed sel 1 (toggles need both values)');
   }
 });
-test('Patcher: mixer PLAY, STOP, M buttons are gated by sel 1', () => {
+test('Patcher: mixer PLAY, STOP, M buttons wire directly to messages', () => {
   const P = loadPatcher();
   const mixer = boxById(P, 'mixer');
   const mixP = mixer.patcher;
   for (let i = 0; i < 12; i++) {
-    for (const btn of ['play_' + i, 'stop_' + i, 'mute_' + i]) {
+    for (const [btn, msg] of [['play_' + i, 'm_play_' + i], ['stop_' + i, 'm_stop_' + i], ['mute_' + i, 'm_mute_' + i]]) {
       const wires = wiresBySource(mixP, btn);
       if (!wires.length) continue; // hidden strip
       const targets = wires.map(w => boxById(mixP, w.patchline.destination[0]));
-      const hasSel1 = targets.some(t => t && t.text && t.text.startsWith('sel 1'));
-      assert.ok(hasSel1, 'mixer ' + btn + ' must feed a sel 1 object');
+      const hasMessage = targets.some(t => t && t.id === msg);
+      assert.ok(hasMessage, 'mixer ' + btn + ' must wire directly to ' + msg);
     }
   }
 });
@@ -574,10 +578,18 @@ test('Patcher: mixer tick runs from loadbang, not from window open', () => {
   const tickLoad = boxById(mixP, 'tick_load');
   assert.ok(tickLoad, 'mixer must have tick_load loadbang');
   assert.strictEqual(tickLoad.maxclass, 'loadbang', 'tick_load must be a loadbang');
-  const tickMetro = boxById(mixP, 'tick_metro');
-  assert.ok(tickMetro, 'mixer must have tick_metro');
-  assert.ok(tickMetro.text.includes('metro'), 'tick_metro must be a metro');
-  // Verify tick_load -> m_tick_on -> tick_metro -> tick_defer -> m_tick -> mix_js
-  const loadWires = wiresBySource(mixP, 'tick_load');
-  assert.ok(loadWires.some(w => boxById(mixP, w.patchline.destination[0])?.id === 'm_tick_on'), 'tick_load must wire to m_tick_on');
+  // Verify complete chain: tick_load -> m_tick_on -> tick_metro -> tick_defer -> m_tick -> mix_js
+  const chain = [
+    ['tick_load', 'm_tick_on'],
+    ['m_tick_on', 'tick_metro'],
+    ['tick_metro', 'tick_defer'],
+    ['tick_defer', 'm_tick'],
+    ['m_tick', 'mix_js']
+  ];
+  for (const [src, dst] of chain) {
+    const wires = wiresBySource(mixP, src);
+    assert.ok(wires.length > 0, src + ' must have outgoing wires');
+    const targets = wires.map(w => w.patchline.destination[0]);
+    assert.ok(targets.includes(dst), src + ' must wire to ' + dst + ', found: ' + targets.join(', '));
+  }
 });
