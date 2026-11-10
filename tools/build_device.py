@@ -250,20 +250,12 @@ def mixer_view():
 
     obj("mix_js", "js mixer.js", 1, 1, 210, 190)
     msg("m_opened", "opened", 210, 60)
-    # Deferred tick for parameter updates, runs from load, even when window is closed
-    add(
-        "tick_load",
-        maxclass="loadbang",
-        numinlets=1,
-        numoutlets=1,
-        outlettype=["bang"],
-        patching_rect=[380, 60, 60, 22],
-    )
-    msg("m_tick_on", "1", 380, 85)
-    obj("tick_metro", "metro 50", 2, 1, 380, 110, ["bang"])
-    obj("tick_defer", "deferlow", 1, 1, 380, 140)
-    msg("m_tick", "tick", 380, 170)
-    wire("tick_load", "m_tick_on")
+    # Deferred tick for parameter updates, runs from device load via in_cmd
+    msg("m_tick_on", "1", 380, 60)
+    obj("tick_metro", "metro 50", 2, 1, 380, 85, ["bang"])
+    obj("tick_defer", "deferlow", 1, 1, 380, 115)
+    msg("m_tick", "tick", 380, 145)
+    wire("in_cmd", "m_tick_on")
     wire("m_tick_on", "tick_metro")
     wire("tick_metro", "tick_defer")
     wire("tick_defer", "m_tick")

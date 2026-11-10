@@ -571,16 +571,13 @@ test('Patcher: mixer PLAY, STOP, M buttons wire directly to messages', () => {
     }
   }
 });
-test('Patcher: mixer tick runs from loadbang, not from window open', () => {
+test('Patcher: mixer tick runs from device load via in_cmd, not window open', () => {
   const P = loadPatcher();
   const mixer = boxById(P, 'mixer');
   const mixP = mixer.patcher;
-  const tickLoad = boxById(mixP, 'tick_load');
-  assert.ok(tickLoad, 'mixer must have tick_load loadbang');
-  assert.strictEqual(tickLoad.maxclass, 'loadbang', 'tick_load must be a loadbang');
-  // Verify complete chain: tick_load -> m_tick_on -> tick_metro -> tick_defer -> m_tick -> mix_js
+  // Verify complete chain: in_cmd -> m_tick_on -> tick_metro -> tick_defer -> m_tick -> mix_js
   const chain = [
-    ['tick_load', 'm_tick_on'],
+    ['in_cmd', 'm_tick_on'],
     ['m_tick_on', 'tick_metro'],
     ['tick_metro', 'tick_defer'],
     ['tick_defer', 'm_tick'],
@@ -591,5 +588,23 @@ test('Patcher: mixer tick runs from loadbang, not from window open', () => {
     assert.ok(wires.length > 0, src + ' must have outgoing wires');
     const targets = wires.map(w => w.patchline.destination[0]);
     assert.ok(targets.includes(dst), src + ' must wire to ' + dst + ', found: ' + targets.join(', '));
+  }
+});
+test('Patcher: no dangling patchcords in any patcher', () => {
+  const P = loadPatcher();
+  function checkPatcher(p, name) {
+    const boxIds = new Set();
+    for (const box of p.boxes) boxIds.add(box.box.id);
+    for (const line of p.lines) {
+      const src = line.patchline.source[0];
+      const dst = line.patchline.destination[0];
+      assert.ok(boxIds.has(src), name + ': patchline source "' + src + '" must exist');
+      assert.ok(boxIds.has(dst), name + ': patchline destination "' + dst + '" must exist');
+    }
+  }
+  checkPatcher(P, 'main patcher');
+  for (const box of P.boxes) {
+    const b = box.box;
+    if (b.patcher) checkPatcher(b.patcher, 'subpatcher "' + b.id + '"');
   }
 });
