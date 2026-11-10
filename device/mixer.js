@@ -19,7 +19,7 @@ var TEXT_OFF = [0.6, 0.6, 0.6, 1];
 
 var api = null;
 var tracksWatcher = null;
-var strips = []; // { name, track, kids: [track indexes], muted, playing, watcher }
+var strips = []; // { name, track, kids: [track indexes], muted, playing, watcher, muteDirty }
 var curScene = 0;
 var ready = false;
 var tracksDirty = false;
@@ -48,13 +48,16 @@ function paint(o, color, text) {
 function paintPlay(i) {
 	paint(box("play_" + i), COLOR_OFF, strips[i].playing ? ICON_PLAYING : TEXT_OFF);
 }
-function paintMute(i) {
+function paintMute(i, updateDevice) {
 	var muted = strips[i].muted;
 	paint(box("mute_" + i), muted ? COLOR_OFF : COLOR_ACTIVE, muted ? TEXT_OFF : TEXT_ON);
 	// The device button is an on/off switch whose value is "group active". "set" changes it
 	// without output, so mirroring Live's state can't send a command back.
-	var dev = deviceButton(i);
-	if (dev) dev.message("set", muted ? 0 : 1);
+	// Only update the device button when explicitly requested (not from observer callbacks).
+	if (updateDevice) {
+		var dev = deviceButton(i);
+		if (dev) dev.message("set", muted ? 0 : 1);
+	}
 }
 
 function unwatch() {
@@ -64,10 +67,12 @@ function unwatch() {
 
 function makeMuteCallback(i) {
 	return function (args) {
-		// A UI update only: Live forbids changing the set from a notification.
+		// Record state only: Live forbids changing the set from a notification.
+		// The deferred tick applies the parameter update.
 		if (args && args[0] === "mute" && strips[i]) {
 			strips[i].muted = !!args[1];
-			paintMute(i);
+			strips[i].muteDirty = true;
+			paintMute(i, false);
 		}
 	};
 }
@@ -93,7 +98,7 @@ function build() {
 	for (t = 0; t < count; t++) {
 		if (info[t].group && !byId[info[t].parent]) {
 			stripFor[info[t].id] = found.length;
-			found.push({ name: info[t].name, track: t, kids: [], muted: false, playing: false, watcher: null });
+			found.push({ name: info[t].name, track: t, kids: [], muted: false, playing: false, watcher: null, muteDirty: false });
 		}
 	}
 	for (t = 0; t < count; t++) {
@@ -124,7 +129,7 @@ function build() {
 		strips[s].watcher = new LiveAPI(makeMuteCallback(s), trackPath(strips[s].track));
 		strips[s].watcher.property = "mute";
 		paintPlay(s);
-		paintMute(s);
+		paintMute(s, true);
 	}
 	pollIndex = 0;
 	setStatus(strips.length ? "" : "No group tracks found");
@@ -172,6 +177,18 @@ function refresh() {
 	if (!tracksDirty) return;
 	tracksDirty = false;
 	if (String(at("live_set").get("tracks")) !== trackIds) build();
+}
+
+// Runs in a deferred context, even when the window is closed, to apply pending parameter updates.
+function tick() {
+	if (!ready) return;
+	for (var i = 0; i < strips.length; i++) {
+		if (strips[i].muteDirty) {
+			strips[i].muteDirty = false;
+			var dev = deviceButton(i);
+			if (dev) dev.message("set", strips[i].muted ? 0 : 1);
+		}
+	}
 }
 
 // Checks one strip per call, and only while the window is visible, to keep the load small.

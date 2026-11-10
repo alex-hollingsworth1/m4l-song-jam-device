@@ -466,6 +466,7 @@ test('Device mutes: named after the groups, spares hidden, and they work without
   assert.deepStrictEqual(M.devObj('dmute_0').msgs.text, ['DRUMS']); assert.strictEqual(M.devObj('dmute_2').hidden, 1);
   assert.deepStrictEqual(M.devObj('dmute_1').msgs.set, [0]); assert.deepStrictEqual(M.devObj('dmute_0').msgs.set, [1]);
   M.ctx.active(0, 0); assert.deepStrictEqual(M.log, [['mute', 0, 1]]);
+  M.ctx.tick();
   assert.deepStrictEqual(M.devObj('dmute_0').msgs.set, [0]); assert.strictEqual(M.obj('mute_0').msgs.activebgcolor.join(), OFFC);
 });
 test('Device mutes: the window is not resized while closed, then fits when opened', () => {
@@ -486,9 +487,69 @@ test('Device switches: set the state rather than flip it, so repeats are harmles
 });
 test('Device switches: the window M and the device switch stay in sync both ways', () => {
   const M = makeMixer(SET()); M.ctx.opened();
-  M.ctx.mute(0); assert.deepStrictEqual(M.devObj('dmute_0').msgs.set, [0]);
-  M.ctx.active(0, 1); assert.strictEqual(M.obj('mute_0').msgs.activebgcolor.join(), YELLOW);
+  M.ctx.mute(0); M.ctx.tick(); assert.deepStrictEqual(M.devObj('dmute_0').msgs.set, [0]);
+  M.ctx.active(0, 1); M.ctx.tick(); assert.strictEqual(M.obj('mute_0').msgs.activebgcolor.join(), YELLOW);
 });
 test('Device switches: ignored before the device has loaded, e.g. Live restoring saved values', () => {
   const M = makeMixer(SET()); M.ctx.active(0, 0); assert.deepStrictEqual(M.log, []);
+});
+test('Mute notification does not set dmute_N synchronously, only after deferred tick', () => {
+  const M = makeMixer(SET()); M.ctx.opened();
+  const initialSet = M.devObj('dmute_0').msgs.set;
+  M.tracks[0].mute = 1;
+  M.watchers.filter(w => w._p === 'mute' && w.path === 'live_set tracks 0').forEach(w => w.cb(['mute', 1]));
+  assert.deepStrictEqual(M.devObj('dmute_0').msgs.set, initialSet, 'dmute_0 must not be set synchronously in notification');
+  assert.strictEqual(M.ctx.strips[0].muted, true, 'muted state must be recorded');
+  M.ctx.tick();
+  assert.deepStrictEqual(M.devObj('dmute_0').msgs.set, [0], 'dmute_0 must be set after deferred tick');
+});
+
+// ---- patcher structure checks ----
+function loadPatcher() {
+  const data = fs.readFileSync(path.join(__dirname, '../device/SongJamRouter.amxd'));
+  const idx = data.indexOf(Buffer.from('ptch'));
+  if (idx < 0) throw new Error('ptch not found');
+  const len = data.readUInt32LE(idx + 4);
+  const json = data.slice(idx + 8, idx + 8 + len).toString('utf8').replace(/\0+$/, '');
+  return JSON.parse(json).patcher;
+}
+function boxById(patcher, id) {
+  return patcher.boxes.find(b => b.box.id === id)?.box;
+}
+function wiresBySource(patcher, srcId) {
+  return patcher.lines.filter(l => l.patchline.source[0] === srcId);
+}
+test('Patcher: each command button is gated by sel 1', () => {
+  const P = loadPatcher();
+  const buttons = ['b_song', 'b_jam', 'b_toggle', 'b_cancel', 'b_next', 'b_prev', 'b_rescan', 'b_window', 'b_mixer'];
+  for (const btn of buttons) {
+    const wires = wiresBySource(P, btn);
+    assert.ok(wires.length > 0, btn + ' must have outgoing wires');
+    const targets = wires.map(w => boxById(P, w.patchline.destination[0]));
+    const hasSel1 = targets.some(t => t && t.text && t.text.startsWith('sel 1'));
+    assert.ok(hasSel1, btn + ' must feed a sel 1 object');
+  }
+});
+test('Patcher: big window buttons are gated by sel 1', () => {
+  const P = loadPatcher();
+  const big = boxById(P, 'big');
+  const bigP = big.patcher;
+  const buttons = ['song', 'jam', 'cancel', 'prev', 'next'];
+  for (const btn of buttons) {
+    const wires = wiresBySource(bigP, btn);
+    const targets = wires.map(w => boxById(bigP, w.patchline.destination[0]));
+    const hasSel1 = targets.some(t => t && t.text && t.text.startsWith('sel 1'));
+    assert.ok(hasSel1, 'big window ' + btn + ' must feed a sel 1 object');
+  }
+});
+test('Patcher: group on/off switches (dmute_N) are mode 1 and not gated', () => {
+  const P = loadPatcher();
+  for (let i = 0; i < 12; i++) {
+    const btn = boxById(P, 'b_dmute_' + i);
+    assert.strictEqual(btn.mode, 1, 'dmute_' + i + ' must be mode 1 (toggle)');
+    const wires = wiresBySource(P, 'b_dmute_' + i);
+    const targets = wires.map(w => boxById(P, w.patchline.destination[0]));
+    const hasSel1 = targets.some(t => t && t.text && t.text.startsWith('sel 1'));
+    assert.ok(!hasSel1, 'dmute_' + i + ' must NOT feed sel 1 (toggles need both values)');
+  }
 });

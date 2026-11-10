@@ -25,6 +25,11 @@ def obj(box_id, text, inlets, outlets, x, y, outlettype=None):
     )
 
 
+def sel1(box_id, x, y):
+    """Filters button output to pass only press (1), not release (0)."""
+    obj(box_id, "sel 1", 1, 1, x, y, ["bang"])
+
+
 def msg(box_id, text, x, y):
     add(
         box_id,
@@ -140,8 +145,10 @@ def big_button(box_id, value, rect, x, size, m, patch_y=300, **extra):
         presentation_rect=rect,
         **extra,
     )
+    sel1("sel_" + box_id, x, patch_y + 25)
     msg("m_" + box_id, m, x, patch_y + 40)
-    wire(box_id, "m_" + box_id)
+    wire(box_id, "sel_" + box_id)
+    wire("sel_" + box_id, "m_" + box_id)
     wire("m_" + box_id, "out")
 
 
@@ -248,6 +255,17 @@ def mixer_view():
 
     obj("mix_js", "js mixer.js", 1, 1, 210, 190)
     msg("m_opened", "opened", 210, 60)
+    # Deferred tick for parameter updates, runs even when window is closed
+    msg("m_tick_on", "1", 380, 60)
+    obj("tick_metro", "metro 50", 2, 1, 380, 95, ["bang"])
+    obj("tick_defer", "deferlow", 1, 1, 380, 125)
+    msg("m_tick", "tick", 380, 155)
+    wire("in_cfg", "m_tick_on")
+    wire("m_tick_on", "tick_metro")
+    wire("tick_metro", "tick_defer")
+    wire("tick_defer", "m_tick")
+    wire("m_tick", "mix_js")
+    # Poll for playing state, runs only when window is visible
     msg("m_mix_on", "1", 300, 60)
     obj("mix_metro", "metro 200", 2, 1, 300, 95, ["bang"])
     obj("mix_defer", "deferlow", 1, 1, 300, 125)
@@ -465,8 +483,10 @@ for b, m, x in [
     ("b_prev", "prev", 660),
     ("b_rescan", "rescan", 420),
 ]:
+    sel1("sel_" + m, x, 315)
     msg("m_" + m, m, x, 340)
-    wire(b, "m_" + m)
+    wire(b, "sel_" + m)
+    wire("sel_" + m, "m_" + m)
     wire("m_" + m, "js")
 
 # js sends "set <text>" to each value comment, and "song|jam <attr> r g b a" to the lamps.
@@ -504,14 +524,14 @@ add(
     patching_rect=[20, 400, 300, 22],
     patcher=big_view(),
 )
+sel1("sel_window", 500, 315)
 msg("m_open", "open", 500, 340)
 obj("pcontrol", "pcontrol", 1, 1, 500, 370)
 obj("t_open", "t b b", 1, 2, 590, 340, ["bang", "bang"])
 obj("defer_open", "deferlow", 1, 1, 590, 370)
-wire("b_window", "t_open")
-wire(
-    "t_open", "defer_open", 0
-)  # right outlet fires first: open, then configure the window
+wire("b_window", "sel_window")
+wire("sel_window", "t_open")
+wire("t_open", "defer_open", 0)  # right outlet fires first: open, then configure the window
 wire("t_open", "m_open", 1)
 wire("m_open", "pcontrol")
 wire("pcontrol", "big")
@@ -532,11 +552,13 @@ add(
     patching_rect=[340, 400, 300, 22],
     patcher=mixer_view(),
 )
+sel1("sel_mixer", 740, 315)
 msg("m_mix_open", "open", 740, 340)
 obj("mix_pcontrol", "pcontrol", 1, 1, 740, 370)
 obj("t_mix", "t b b", 1, 2, 830, 340, ["bang", "bang"])
 obj("defer_mix", "deferlow", 1, 1, 830, 370)
-wire("b_mixer", "t_mix")
+wire("b_mixer", "sel_mixer")
+wire("sel_mixer", "t_mix")
 wire("t_mix", "defer_mix", 0)
 wire("t_mix", "m_mix_open", 1)
 wire("m_mix_open", "mix_pcontrol")
