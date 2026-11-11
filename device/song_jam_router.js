@@ -77,7 +77,7 @@ function freshState() {
 		dueB: null,          // boundary we already intend to act on
 		title: "", titleScene: 0, titleDirty: false,
 		nextReq: false, prevReq: false, scenesDirty: false, probeAt: 0, lastTime: null,
-		lastPress: 0, scanOk: false, ids: "", warnings: 0, status: "", sceneCount: 0
+		lastPress: 0, scanOk: false, ids: "", warnings: 0, status: "", sceneCount: 0, scanRetry: 0, scanRetryCount: 0
 	};
 }
 
@@ -208,6 +208,18 @@ function scan() {
 	S.title = names.title;
 	S.titleScene = names.titleScene;
 	if (names.titleCount > 1) warn(names.titleCount + " scenes start with " + TITLE_TAG + " using '" + names.title + "'");
+	
+	// If no scene names were found at all, Live's set data isn't ready yet. Defer and retry
+	// up to 5 times (~500ms). After that, proceed with normal scan to show warnings.
+	var nameCount = 0;
+	for (var k in names.numbers) nameCount++;
+	if (S.sceneCount > 0 && nameCount === 0 && S.scanRetryCount < 5) {
+		if (S.scanRetryCount === 0) post("ROUTER: Live set scenes not ready yet, retrying in 100ms\n");
+		S.scanRetry = Date.now() + 100;
+		S.scanRetryCount++;
+		return;
+	}
+	
 	var missing = "";
 	for (var i = 0; i < SECTIONS.length; i++) {
 		var s = SECTIONS[i];
@@ -229,6 +241,8 @@ function scan() {
 	S.scanOk = ok;
 	setStatus(ok ? okStatus() : "SCENE NOT FOUND: " + missing);
 	post("ROUTER scan done: " + S.warnings + " warning(s), armed=" + ok + "\n");
+	S.scanRetry = 0;
+	S.scanRetryCount = 0;
 }
 
 // ---- observers (record only, never change the Live Set) ----
@@ -321,6 +335,15 @@ function fire(n, now) {
 // ---- transport / set safety, then the scheduler; runs every 50 ms ----
 function tick() {
 	if (!S.ready) return;
+	
+	// Retry scan if it was deferred due to Live set not being ready
+	if (S.scanRetry && Date.now() >= S.scanRetry) {
+		S.scanRetry = 0;
+		scan();
+		if (S.armed) ensureQuantization();
+		bindObservers();
+	}
+	
 	var song = songApi;
 	var playing = first(song.get("is_playing"));
 	var now = first(song.get("current_song_time"));

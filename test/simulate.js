@@ -11,7 +11,7 @@ function makeLive(opts = {}) {
   const lens = opts.lens || {};
   for (let i = 0; i < 40; i++) { L.order.push(1000 + i); }
   if (opts.removeFirst) L.order.splice(0, opts.removeFirst);
-  L.names = Object.assign({}, NAMES, opts.names || {});
+  L.names = opts.replaceNames ? (opts.names || {}) : Object.assign({}, NAMES, opts.names || {});
   const clipAt = s => (MAPPED.includes(s) || s === 7) ? { length: lens[s] || 32, looping: 1, lq: (opts.badQuant === s) ? 1 : 0 } : null;
   L.playingSlot = [-1, -1, -1];
   L.sceneColor = n => ([3,5,8,12,16,19,22,25,28,29,32,35].includes(n) ? 0xE040C0 : 0x12AB34);
@@ -353,6 +353,49 @@ test('Title: never part of the song, so PREV from Intro is still refused', () =>
   assert.deepStrictEqual(seq(L), [6]); assert.ok(L.out[4].startsWith('BEGINNING'));
 });
 
+// ---- scan retry tests ----
+test('Scan retry: all scenes unnamed, retries stop after 5 attempts and normal warnings appear', () => {
+  const L = makeLive({ replaceNames: true, names: {} }); // all scenes return empty names
+  assert.strictEqual(L.ctx.S.armed, false, 'initial scan should defer');
+  assert.ok(L.ctx.S.scanRetry > 0, 'should schedule retry');
+  // Advance time and trigger retries until they're exhausted
+  for (let i = 0; i < 10; i++) {
+    L.ms += 110; // advance past retry time
+    L.ctx.tick();
+    if (L.ctx.S.scanRetry === 0) break;
+  }
+  assert.strictEqual(L.ctx.S.armed, false, 'scan should fail with no names after retries exhausted');
+  assert.strictEqual(L.ctx.S.scanRetryCount, 0, 'retry count should be reset after final scan');
+  assert.ok(L.warnings.length >= 20, 'should have scene not found warnings after retry cap');
+  assert.ok(L.warnings.some(w => w.includes('no scene named')), 'should warn about missing scenes');
+});
+test('Scan retry: names arrive on later retry, scan succeeds with no false warnings', () => {
+  const L = makeLive({ replaceNames: true, names: {} }); // names arrive after ticks
+  assert.strictEqual(L.ctx.S.armed, false, 'initial scan should defer');
+  assert.ok(L.ctx.S.scanRetry > 0, 'should schedule retry');
+  const initialWarnings = L.warnings.length;
+  // Simulate names becoming available after 2 retries
+  L.ms += 110;
+  L.ctx.tick();
+  L.ms += 110;
+  L.names = Object.assign({}, NAMES);
+  L.ctx.tick();
+  assert.strictEqual(L.ctx.S.armed, true, 'retry scan should succeed once names available');
+  assert.strictEqual(L.warnings.length, initialWarnings, 'should have no additional warnings on successful retry');
+});
+test('Scan retry: deferral message logged once, retry fires from tick', () => {
+  const L = makeLive({ replaceNames: true, names: {} });
+  // The first defer should be visible in warnings (since it's not a WARN message, check scan state)
+  assert.strictEqual(L.ctx.S.armed, false, 'should not be armed initially');
+  assert.ok(L.ctx.S.scanRetry > 0, 'should have retry timestamp set');
+  assert.strictEqual(L.ctx.S.scanRetryCount, 1, 'should have attempted once');
+  // Verify retry fires from tick
+  const preRetryCount = L.ctx.S.scanRetryCount;
+  L.ms += 110;
+  L.ctx.tick();
+  assert.ok(L.ctx.S.scanRetryCount > preRetryCount || L.ctx.S.scanRetryCount === 0, 'tick should trigger retry (increment count or complete scan)');
+});
+
 // ---- mixer.js ----
 function makeMixer(tracks, opts = {}) {
   const log = [], objs = {}, posts = [];
@@ -466,6 +509,7 @@ test('Device mutes: named after the groups, spares hidden, and they work without
   assert.deepStrictEqual(M.devObj('dmute_0').msgs.text, ['DRUMS']); assert.strictEqual(M.devObj('dmute_2').hidden, 1);
   assert.deepStrictEqual(M.devObj('dmute_1').msgs.set, [0]); assert.deepStrictEqual(M.devObj('dmute_0').msgs.set, [1]);
   M.ctx.active(0, 0); assert.deepStrictEqual(M.log, [['mute', 0, 1]]);
+  M.ctx.tick();
   assert.deepStrictEqual(M.devObj('dmute_0').msgs.set, [0]); assert.strictEqual(M.obj('mute_0').msgs.activebgcolor.join(), OFFC);
 });
 test('Device mutes: the window is not resized while closed, then fits when opened', () => {
@@ -486,9 +530,126 @@ test('Device switches: set the state rather than flip it, so repeats are harmles
 });
 test('Device switches: the window M and the device switch stay in sync both ways', () => {
   const M = makeMixer(SET()); M.ctx.opened();
-  M.ctx.mute(0); assert.deepStrictEqual(M.devObj('dmute_0').msgs.set, [0]);
-  M.ctx.active(0, 1); assert.strictEqual(M.obj('mute_0').msgs.activebgcolor.join(), YELLOW);
+  M.ctx.mute(0); M.ctx.tick(); assert.deepStrictEqual(M.devObj('dmute_0').msgs.set, [0]);
+  M.ctx.active(0, 1); M.ctx.tick(); assert.strictEqual(M.obj('mute_0').msgs.activebgcolor.join(), YELLOW);
 });
 test('Device switches: ignored before the device has loaded, e.g. Live restoring saved values', () => {
   const M = makeMixer(SET()); M.ctx.active(0, 0); assert.deepStrictEqual(M.log, []);
+});
+test('Mute notification does not set dmute_N synchronously, only after deferred tick', () => {
+  const M = makeMixer(SET()); M.ctx.opened();
+  const initialSet = M.devObj('dmute_0').msgs.set;
+  M.tracks[0].mute = 1;
+  M.watchers.filter(w => w._p === 'mute' && w.path === 'live_set tracks 0').forEach(w => w.cb(['mute', 1]));
+  assert.deepStrictEqual(M.devObj('dmute_0').msgs.set, initialSet, 'dmute_0 must not be set synchronously in notification');
+  assert.strictEqual(M.ctx.strips[0].muted, true, 'muted state must be recorded');
+  M.ctx.tick();
+  assert.deepStrictEqual(M.devObj('dmute_0').msgs.set, [0], 'dmute_0 must be set after deferred tick');
+});
+
+// ---- patcher structure checks ----
+function loadPatcher() {
+  const data = fs.readFileSync(path.join(__dirname, '../device/SongJamRouter.amxd'));
+  const idx = data.indexOf(Buffer.from('ptch'));
+  if (idx < 0) throw new Error('ptch not found');
+  const len = data.readUInt32LE(idx + 4);
+  const json = data.slice(idx + 8, idx + 8 + len).toString('utf8').replace(/\0+$/, '');
+  return JSON.parse(json).patcher;
+}
+function boxById(patcher, id) {
+  return patcher.boxes.find(b => b.box.id === id)?.box;
+}
+function wiresBySource(patcher, srcId) {
+  return patcher.lines.filter(l => l.patchline.source[0] === srcId);
+}
+test('Patcher: each command button wires directly to its message', () => {
+  const P = loadPatcher();
+  const buttons = [
+    ['b_song', 'm_reqsong'], ['b_jam', 'm_reqjam'], ['b_toggle', 'm_toggle'],
+    ['b_cancel', 'm_cancel'], ['b_next', 'm_next'], ['b_prev', 'm_prev'], ['b_rescan', 'm_rescan']
+  ];
+  for (const [btn, msg] of buttons) {
+    const wires = wiresBySource(P, btn);
+    assert.ok(wires.length > 0, btn + ' must have outgoing wires');
+    const targets = wires.map(w => boxById(P, w.patchline.destination[0]));
+    const hasMessage = targets.some(t => t && t.id === msg);
+    assert.ok(hasMessage, btn + ' must wire directly to ' + msg + ' (live.text mode 0 outputs bang, not 1/0)');
+  }
+});
+test('Patcher: window buttons wire to trigger or message', () => {
+  const P = loadPatcher();
+  const big = boxById(P, 'big');
+  const bigP = big.patcher;
+  const buttons = [['song', 'm_song'], ['jam', 'm_jam'], ['cancel', 'm_cancel'], ['prev', 'm_prev'], ['next', 'm_next']];
+  for (const [btn, msg] of buttons) {
+    const wires = wiresBySource(bigP, btn);
+    assert.ok(wires.length > 0, 'big window ' + btn + ' must have outgoing wires');
+    const targets = wires.map(w => boxById(bigP, w.patchline.destination[0]));
+    const hasMessage = targets.some(t => t && t.id === msg);
+    assert.ok(hasMessage, 'big window ' + btn + ' must wire to ' + msg);
+  }
+});
+test('Patcher: group on/off switches (dmute_N) are mode 1 and not gated', () => {
+  const P = loadPatcher();
+  for (let i = 0; i < 12; i++) {
+    const btn = boxById(P, 'b_dmute_' + i);
+    assert.strictEqual(btn.mode, 1, 'dmute_' + i + ' must be mode 1 (toggle)');
+    const wires = wiresBySource(P, 'b_dmute_' + i);
+    const targets = wires.map(w => boxById(P, w.patchline.destination[0]));
+    const hasSel1 = targets.some(t => t && t.text && t.text.startsWith('sel 1'));
+    assert.ok(!hasSel1, 'dmute_' + i + ' must NOT feed sel 1 (toggles need both values)');
+  }
+});
+test('Patcher: mixer PLAY, STOP, M buttons wire directly to messages', () => {
+  const P = loadPatcher();
+  const mixer = boxById(P, 'mixer');
+  const mixP = mixer.patcher;
+  for (let i = 0; i < 12; i++) {
+    for (const [btn, msg] of [['play_' + i, 'm_play_' + i], ['stop_' + i, 'm_stop_' + i], ['mute_' + i, 'm_mute_' + i]]) {
+      const box = boxById(mixP, btn);
+      if (!box || box.hidden) continue; // hidden strip
+      const wires = wiresBySource(mixP, btn);
+      assert.ok(wires.length > 0, 'mixer ' + btn + ' must have outgoing wires (not hidden but no wires)');
+      const targets = wires.map(w => boxById(mixP, w.patchline.destination[0]));
+      const hasMessage = targets.some(t => t && t.id === msg);
+      assert.ok(hasMessage, 'mixer ' + btn + ' must wire directly to ' + msg);
+    }
+  }
+});
+test('Patcher: mixer tick runs from device load via in_cmd, not window open', () => {
+  const P = loadPatcher();
+  const mixer = boxById(P, 'mixer');
+  const mixP = mixer.patcher;
+  // Verify complete chain: in_cmd -> m_tick_on -> tick_metro -> tick_defer -> m_tick -> mix_js
+  const chain = [
+    ['in_cmd', 'm_tick_on'],
+    ['m_tick_on', 'tick_metro'],
+    ['tick_metro', 'tick_defer'],
+    ['tick_defer', 'm_tick'],
+    ['m_tick', 'mix_js']
+  ];
+  for (const [src, dst] of chain) {
+    const wires = wiresBySource(mixP, src);
+    assert.ok(wires.length > 0, src + ' must have outgoing wires');
+    const targets = wires.map(w => w.patchline.destination[0]);
+    assert.ok(targets.includes(dst), src + ' must wire to ' + dst + ', found: ' + targets.join(', '));
+  }
+});
+test('Patcher: no dangling patchcords in any patcher', () => {
+  const P = loadPatcher();
+  function checkPatcher(p, name) {
+    const boxIds = new Set();
+    for (const box of p.boxes) boxIds.add(box.box.id);
+    for (const line of p.lines) {
+      const src = line.patchline.source[0];
+      const dst = line.patchline.destination[0];
+      assert.ok(boxIds.has(src), name + ': patchline source "' + src + '" must exist');
+      assert.ok(boxIds.has(dst), name + ': patchline destination "' + dst + '" must exist');
+    }
+  }
+  checkPatcher(P, 'main patcher');
+  for (const box of P.boxes) {
+    const b = box.box;
+    if (b.patcher) checkPatcher(b.patcher, 'subpatcher "' + b.id + '"');
+  }
 });

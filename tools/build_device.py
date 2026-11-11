@@ -25,6 +25,8 @@ def obj(box_id, text, inlets, outlets, x, y, outlettype=None):
     )
 
 
+
+
 def msg(box_id, text, x, y):
     add(
         box_id,
@@ -248,6 +250,18 @@ def mixer_view():
 
     obj("mix_js", "js mixer.js", 1, 1, 210, 190)
     msg("m_opened", "opened", 210, 60)
+    # Deferred tick for parameter updates, starts once from device load via in_cmd.
+    # Parent's live.thisdevice sends init to in_cmd, which starts the tick metro.
+    msg("m_tick_on", "1", 380, 60)
+    obj("tick_metro", "metro 50", 2, 1, 380, 85, ["bang"])
+    obj("tick_defer", "deferlow", 1, 1, 380, 115)
+    msg("m_tick", "tick", 380, 145)
+    wire("in_cmd", "m_tick_on")
+    wire("m_tick_on", "tick_metro")
+    wire("tick_metro", "tick_defer")
+    wire("tick_defer", "m_tick")
+    wire("m_tick", "mix_js")
+    # Poll for playing state, runs only when window is visible
     msg("m_mix_on", "1", 300, 60)
     obj("mix_metro", "metro 200", 2, 1, 300, 95, ["bang"])
     obj("mix_defer", "deferlow", 1, 1, 300, 125)
@@ -509,9 +523,7 @@ obj("pcontrol", "pcontrol", 1, 1, 500, 370)
 obj("t_open", "t b b", 1, 2, 590, 340, ["bang", "bang"])
 obj("defer_open", "deferlow", 1, 1, 590, 370)
 wire("b_window", "t_open")
-wire(
-    "t_open", "defer_open", 0
-)  # right outlet fires first: open, then configure the window
+wire("t_open", "defer_open", 0)  # right outlet fires first: open, then configure the window
 wire("t_open", "m_open", 1)
 wire("m_open", "pcontrol")
 wire("pcontrol", "big")
