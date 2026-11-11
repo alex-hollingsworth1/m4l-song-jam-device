@@ -250,7 +250,8 @@ def mixer_view():
 
     obj("mix_js", "js mixer.js", 1, 1, 210, 190)
     msg("m_opened", "opened", 210, 60)
-    # Deferred tick for parameter updates, runs from device load via in_cmd
+    # Deferred tick for parameter updates, starts once from device load via in_cmd.
+    # Parent's live.thisdevice sends init to in_cmd, which starts the tick metro.
     msg("m_tick_on", "1", 380, 60)
     obj("tick_metro", "metro 50", 2, 1, 380, 85, ["bang"])
     obj("tick_defer", "deferlow", 1, 1, 380, 115)

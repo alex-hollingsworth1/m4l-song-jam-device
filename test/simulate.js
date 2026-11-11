@@ -11,7 +11,7 @@ function makeLive(opts = {}) {
   const lens = opts.lens || {};
   for (let i = 0; i < 40; i++) { L.order.push(1000 + i); }
   if (opts.removeFirst) L.order.splice(0, opts.removeFirst);
-  L.names = Object.assign({}, NAMES, opts.names || {});
+  L.names = opts.replaceNames ? (opts.names || {}) : Object.assign({}, NAMES, opts.names || {});
   const clipAt = s => (MAPPED.includes(s) || s === 7) ? { length: lens[s] || 32, looping: 1, lq: (opts.badQuant === s) ? 1 : 0 } : null;
   L.playingSlot = [-1, -1, -1];
   L.sceneColor = n => ([3,5,8,12,16,19,22,25,28,29,32,35].includes(n) ? 0xE040C0 : 0x12AB34);
@@ -353,6 +353,49 @@ test('Title: never part of the song, so PREV from Intro is still refused', () =>
   assert.deepStrictEqual(seq(L), [6]); assert.ok(L.out[4].startsWith('BEGINNING'));
 });
 
+// ---- scan retry tests ----
+test('Scan retry: all scenes unnamed, retries stop after 5 attempts and normal warnings appear', () => {
+  const L = makeLive({ replaceNames: true, names: {} }); // all scenes return empty names
+  assert.strictEqual(L.ctx.S.armed, false, 'initial scan should defer');
+  assert.ok(L.ctx.S.scanRetry > 0, 'should schedule retry');
+  // Advance time and trigger retries until they're exhausted
+  for (let i = 0; i < 10; i++) {
+    L.ms += 110; // advance past retry time
+    L.ctx.tick();
+    if (L.ctx.S.scanRetry === 0) break;
+  }
+  assert.strictEqual(L.ctx.S.armed, false, 'scan should fail with no names after retries exhausted');
+  assert.strictEqual(L.ctx.S.scanRetryCount, 0, 'retry count should be reset after final scan');
+  assert.ok(L.warnings.length >= 20, 'should have scene not found warnings after retry cap');
+  assert.ok(L.warnings.some(w => w.includes('no scene named')), 'should warn about missing scenes');
+});
+test('Scan retry: names arrive on later retry, scan succeeds with no false warnings', () => {
+  const L = makeLive({ replaceNames: true, names: {} }); // names arrive after ticks
+  assert.strictEqual(L.ctx.S.armed, false, 'initial scan should defer');
+  assert.ok(L.ctx.S.scanRetry > 0, 'should schedule retry');
+  const initialWarnings = L.warnings.length;
+  // Simulate names becoming available after 2 retries
+  L.ms += 110;
+  L.ctx.tick();
+  L.ms += 110;
+  L.names = Object.assign({}, NAMES);
+  L.ctx.tick();
+  assert.strictEqual(L.ctx.S.armed, true, 'retry scan should succeed once names available');
+  assert.strictEqual(L.warnings.length, initialWarnings, 'should have no additional warnings on successful retry');
+});
+test('Scan retry: deferral message logged once, retry fires from tick', () => {
+  const L = makeLive({ replaceNames: true, names: {} });
+  // The first defer should be visible in warnings (since it's not a WARN message, check scan state)
+  assert.strictEqual(L.ctx.S.armed, false, 'should not be armed initially');
+  assert.ok(L.ctx.S.scanRetry > 0, 'should have retry timestamp set');
+  assert.strictEqual(L.ctx.S.scanRetryCount, 1, 'should have attempted once');
+  // Verify retry fires from tick
+  const preRetryCount = L.ctx.S.scanRetryCount;
+  L.ms += 110;
+  L.ctx.tick();
+  assert.ok(L.ctx.S.scanRetryCount > preRetryCount || L.ctx.S.scanRetryCount === 0, 'tick should trigger retry (increment count or complete scan)');
+});
+
 // ---- mixer.js ----
 function makeMixer(tracks, opts = {}) {
   const log = [], objs = {}, posts = [];
@@ -563,8 +606,10 @@ test('Patcher: mixer PLAY, STOP, M buttons wire directly to messages', () => {
   const mixP = mixer.patcher;
   for (let i = 0; i < 12; i++) {
     for (const [btn, msg] of [['play_' + i, 'm_play_' + i], ['stop_' + i, 'm_stop_' + i], ['mute_' + i, 'm_mute_' + i]]) {
+      const box = boxById(mixP, btn);
+      if (!box || box.hidden) continue; // hidden strip
       const wires = wiresBySource(mixP, btn);
-      if (!wires.length) continue; // hidden strip
+      assert.ok(wires.length > 0, 'mixer ' + btn + ' must have outgoing wires (not hidden but no wires)');
       const targets = wires.map(w => boxById(mixP, w.patchline.destination[0]));
       const hasMessage = targets.some(t => t && t.id === msg);
       assert.ok(hasMessage, 'mixer ' + btn + ' must wire directly to ' + msg);
